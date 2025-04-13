@@ -1,0 +1,961 @@
+import React, { useState } from 'react';
+import {
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  Paper,
+  Box,
+  Chip,
+  Typography,
+  TableSortLabel,
+  Tooltip,
+  Drawer,
+  IconButton,
+  Grid,
+  Divider,
+  Button,
+  Stack,
+  TextField,
+  List,
+  ListItem,
+  ListItemText,
+} from '@mui/material';
+import { Order } from '../types/Order';
+import StatusChip from './StatusChip';
+import TrackingStatusChip from './TrackingStatusChip';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import PendingOutlinedIcon from '@mui/icons-material/PendingOutlined';
+import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
+import EditIcon from '@mui/icons-material/Edit';
+
+interface OrdersTableProps {
+  orders: Order[];
+}
+
+// Função auxiliar para converter data BR (DD/MM/YYYY) para formato comparável
+const parseDate = (dateStr: string): Date => {
+  if (!dateStr) return new Date(0); // Data mínima para valores vazios
+  
+  const parts = dateStr.split('/');
+  // Se não tiver formato DD/MM/YYYY, retornar como string
+  if (parts.length !== 3) return new Date(dateStr);
+  
+  const [day, month, year] = parts.map(Number);
+  return new Date(year, month - 1, day);
+};
+
+// Função para formatar tempo relativo
+const formatRelativeTime = (dateStr: string): string => {
+  if (!dateStr) return '-';
+  
+  try {
+    const date = parseDate(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    
+    return `há ${formatDistanceToNow(date, { locale: ptBR })}`;
+  } catch (error) {
+    console.error('Erro ao formatar data relativa:', error);
+    return dateStr;
+  }
+};
+
+// Verifica se o pedido está em uma situação crítica
+const isCriticalStatus = (status: string): boolean => {
+  if (!status) return false;
+  
+  const lowerStatus = status.toLowerCase();
+  return (
+    lowerStatus.includes('confirmar entrega') || 
+    lowerStatus.includes('entrega falha') || 
+    lowerStatus.includes('retirar nos correios')
+  );
+};
+
+// Tipo para acompanhar o estado de ordenação
+type Order_Direction = 'asc' | 'desc';
+type OrderBy = 'dataVenda' | 'ultimaAtualizacao' | 'dataNegociacao' | '';
+
+interface CobrancaHistorico {
+  data: string;
+  observacao: string;
+  situacao: string;
+}
+
+const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
+  const [orderBy, setOrderBy] = useState<OrderBy>('');
+  const [order, setOrder] = useState<Order_Direction>('asc');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [newObservacao, setNewObservacao] = useState('');
+  
+  // Histórico de cobrança simulado (em uma aplicação real, isso viria do backend)
+  const [historicoCobranca, setHistoricoCobranca] = useState<CobrancaHistorico[]>([
+    {
+      data: '12/04/2023 14:32',
+      observacao: 'Cliente solicitou mais tempo para pagamento',
+      situacao: 'Negociação'
+    },
+    {
+      data: '10/04/2023 09:15',
+      observacao: 'Primeira tentativa de contato',
+      situacao: 'Pagamento Pendente'
+    }
+  ]);
+
+  // Função para lidar com solicitações de ordenação
+  const handleRequestSort = (property: OrderBy) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  // Função para criar um comparador de ordenação
+  const getComparator = (
+    order: Order_Direction,
+    orderBy: OrderBy
+  ): (a: Order, b: Order) => number => {
+    return order === 'desc'
+      ? (a, b) => compareValues(a, b, orderBy)
+      : (a, b) => -compareValues(a, b, orderBy);
+  };
+
+  // Função para comparar valores
+  const compareValues = (a: Order, b: Order, orderBy: OrderBy): number => {
+    if (orderBy === '') return 0;
+    
+    if (orderBy === 'dataVenda' || orderBy === 'ultimaAtualizacao' || orderBy === 'dataNegociacao') {
+      const dateA = parseDate(a[orderBy] as string);
+      const dateB = parseDate(b[orderBy] as string);
+      return dateA.getTime() - dateB.getTime();
+    }
+    
+    return 0;
+  };
+
+  // Aplicar ordenação aos pedidos
+  const sortedOrders = orderBy
+    ? [...orders].sort(getComparator(order, orderBy))
+    : orders;
+
+  const createSortHandler = (property: OrderBy) => () => {
+    handleRequestSort(property);
+  };
+  
+  // Função para abrir o painel com os detalhes do pedido
+  const handleRowClick = (order: Order) => {
+    setSelectedOrder(order);
+    setDrawerOpen(true);
+    setEditMode(false);
+  };
+  
+  // Função para fechar o painel
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+    setSelectedOrder(null);
+    setEditMode(false);
+  };
+  
+  // Adicionar nova cobrança ao histórico
+  const handleAddCobranca = () => {
+    if (!newObservacao.trim() || !selectedOrder) return;
+    
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    
+    const novaCobranca: CobrancaHistorico = {
+      data: `${day}/${month}/${year} ${hours}:${minutes}`,
+      observacao: newObservacao,
+      situacao: selectedOrder.situacaoVenda
+    };
+    
+    setHistoricoCobranca([novaCobranca, ...historicoCobranca]);
+    setNewObservacao('');
+  };
+  
+  // Atualizar o status do pedido
+  const handleUpdateStatus = (newStatus: string) => {
+    if (!selectedOrder) return;
+    
+    // Em um app real, aqui você chamaria uma API para atualizar o status no backend
+    console.log(`Pedido ${selectedOrder.idVenda} atualizado para: ${newStatus}`);
+    
+    // Simular atualização do status
+    if (selectedOrder) {
+      selectedOrder.situacaoVenda = newStatus;
+      setSelectedOrder({...selectedOrder});
+      
+      // Adicionar registro no histórico
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      
+      const novaCobranca: CobrancaHistorico = {
+        data: `${day}/${month}/${year} ${hours}:${minutes}`,
+        observacao: `Status atualizado para: ${newStatus}`,
+        situacao: newStatus
+      };
+      
+      setHistoricoCobranca([novaCobranca, ...historicoCobranca]);
+    }
+  };
+  
+  // Alternar modo de edição
+  const handleToggleEditMode = () => {
+    setEditMode(!editMode);
+  };
+
+  return (
+    <>
+      <TableContainer 
+        component={Paper} 
+        elevation={0}
+        sx={{ 
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>ID Venda</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'dataVenda'}
+                  direction={orderBy === 'dataVenda' ? order : 'asc'}
+                  onClick={createSortHandler('dataVenda')}
+                >
+                  Data Venda
+                  <Box component="span" sx={{ border: 0, clip: 'rect(0 0 0 0)', height: 1, margin: -1, overflow: 'hidden', padding: 0, position: 'absolute', top: 20, width: 1 }}>
+                    {order === 'desc' ? 'Ordenar decrescente' : 'Ordenar crescente'}
+                  </Box>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>Cliente</TableCell>
+              <TableCell>Situação</TableCell>
+              <TableCell>Rastreio</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'ultimaAtualizacao'}
+                  direction={orderBy === 'ultimaAtualizacao' ? order : 'asc'}
+                  onClick={createSortHandler('ultimaAtualizacao')}
+                >
+                  Atualização Correios
+                  <Box component="span" sx={{ border: 0, clip: 'rect(0 0 0 0)', height: 1, margin: -1, overflow: 'hidden', padding: 0, position: 'absolute', top: 20, width: 1 }}>
+                    {order === 'desc' ? 'Ordenar decrescente' : 'Ordenar crescente'}
+                  </Box>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'dataNegociacao'}
+                  direction={orderBy === 'dataNegociacao' ? order : 'asc'}
+                  onClick={createSortHandler('dataNegociacao')}
+                >
+                  Última Cobrança
+                  <Box component="span" sx={{ border: 0, clip: 'rect(0 0 0 0)', height: 1, margin: -1, overflow: 'hidden', padding: 0, position: 'absolute', top: 20, width: 1 }}>
+                    {order === 'desc' ? 'Ordenar decrescente' : 'Ordenar crescente'}
+                  </Box>
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>Data Recebimento</TableCell>
+              <TableCell>Data Negociação</TableCell>
+              <TableCell>Vendedor</TableCell>
+              <TableCell>Operador</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sortedOrders.map((order, index) => {
+              const isCritical = isCriticalStatus(order.situacaoVenda);
+              return (
+                <TableRow 
+                  key={order.idVenda || index}
+                  sx={{
+                    '&:hover': {
+                      bgcolor: 'primary.light',
+                    },
+                    ...(isCritical && {
+                      bgcolor: 'rgba(255, 72, 66, 0.12)',
+                      '&:hover': {
+                        bgcolor: 'rgba(255, 72, 66, 0.18)',
+                      },
+                      borderLeft: '3px solid',
+                      borderColor: 'error.main',
+                    }),
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleRowClick(order)}
+                >
+                  <TableCell>{order.idVenda}</TableCell>
+                  <TableCell>{order.dataVenda}</TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>{order.cliente}</TableCell>
+                  <TableCell>
+                    <StatusChip status={order.situacaoVenda} />
+                  </TableCell>
+                  <TableCell>
+                    {order.codigoRastreio ? (
+                      <TrackingStatusChip 
+                        trackingCode={order.codigoRastreio}
+                        refreshInterval={7200000} // 2 horas
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">Sem rastreio</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>{order.ultimaAtualizacao}</TableCell>
+                  <TableCell>
+                    <Tooltip title={order.dataNegociacao || "Sem cobrança"}>
+                      <Typography variant="body2">
+                        {order.dataNegociacao ? formatRelativeTime(order.dataNegociacao) : "-"}
+                      </Typography>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>{order.dataRecebimento || "-"}</TableCell>
+                  <TableCell>{order.dataNegociacao || "-"}</TableCell>
+                  <TableCell>{order.vendedor || "-"}</TableCell>
+                  <TableCell>{order.operador || "-"}</TableCell>
+                </TableRow>
+              );
+            })}
+            {orders.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={11} align="center" sx={{ py: 3 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    Nenhum pedido encontrado
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      
+      {/* Painel lateral com detalhes do pedido */}
+      <Drawer
+        anchor="right"
+        open={drawerOpen}
+        onClose={handleCloseDrawer}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: { xs: '100%', sm: '550px' },
+            overflow: 'auto',
+            p: 0,
+            bgcolor: '#FAFAFA',
+          },
+        }}
+      >
+        {selectedOrder && (
+          <>
+            {/* Cabeçalho */}
+            <Box 
+              sx={{ 
+                p: 3, 
+                background: 'linear-gradient(to right, #f5f7ff, #eef1fd)',
+                borderBottom: '1px solid rgba(0,0,0,0.08)',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="h6" fontWeight={600} sx={{ color: '#2c3e50' }}>
+                  #{selectedOrder.idVenda}
+                </Typography>
+                <IconButton 
+                  onClick={handleCloseDrawer} 
+                  edge="end"
+                  sx={{ 
+                    bgcolor: 'rgba(0,0,0,0.05)',
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.1)' },
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                {selectedOrder.dataVenda} • {selectedOrder.cliente}
+              </Typography>
+              
+              <StatusChip status={selectedOrder.situacaoVenda} />
+            </Box>
+            
+            {/* Conteúdo principal com scroll */}
+            <Box sx={{ p: 3 }}>
+              {/* Botões de ações rápidas */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  mb: 3, 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  bgcolor: 'white'
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ mb: 1.5, color: '#637381', fontWeight: 600 }}>
+                  Ações Rápidas
+                </Typography>
+                
+                <Grid container spacing={1}>
+                  <Grid item xs={6} sm={3}>
+                    <Button 
+                      variant="outlined" 
+                      startIcon={<CheckCircleOutlineIcon />}
+                      onClick={() => handleUpdateStatus('Completo')}
+                      color="success"
+                      size="small"
+                      fullWidth
+                      sx={{ 
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        py: 0.7,
+                      }}
+                    >
+                      Finalizar
+                    </Button>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Button 
+                      variant="outlined" 
+                      startIcon={<PendingOutlinedIcon />}
+                      onClick={() => handleUpdateStatus('Pagamento Pendente')}
+                      color="warning"
+                      size="small"
+                      fullWidth
+                      sx={{ 
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        py: 0.7,
+                      }}
+                    >
+                      Pendente
+                    </Button>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Button 
+                      variant="outlined" 
+                      startIcon={<HandshakeOutlinedIcon />}
+                      onClick={() => handleUpdateStatus('Negociação')}
+                      color="info"
+                      size="small"
+                      fullWidth
+                      sx={{ 
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        py: 0.7,
+                      }}
+                    >
+                      Negociação
+                    </Button>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Button 
+                      variant="outlined" 
+                      startIcon={<CancelOutlinedIcon />}
+                      onClick={() => handleUpdateStatus('Frustrado')}
+                      color="error"
+                      size="small"
+                      fullWidth
+                      sx={{ 
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        py: 0.7,
+                      }}
+                    >
+                      Frustrado
+                    </Button>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Button 
+                      variant="outlined" 
+                      startIcon={<EditIcon />}
+                      onClick={() => {
+                        const obsField = document.getElementById('observacao-field');
+                        if (obsField) {
+                          obsField.scrollIntoView({ behavior: 'smooth' });
+                          obsField.focus();
+                        }
+                      }}
+                      color="primary"
+                      size="small"
+                      fullWidth
+                      sx={{ 
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        py: 0.7,
+                      }}
+                    >
+                      Obs.
+                    </Button>
+                  </Grid>
+                </Grid>
+                
+                <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button 
+                    variant={editMode ? "contained" : "text"}
+                    startIcon={<EditIcon />}
+                    onClick={handleToggleEditMode}
+                    color="primary"
+                    size="small"
+                    sx={{ 
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                    }}
+                  >
+                    {editMode ? 'Cancelar Edição' : 'Editar Informações'}
+                  </Button>
+                </Box>
+              </Paper>
+              
+              {/* Informações principais */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  mb: 3, 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  bgcolor: 'white'
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
+                  Informações do Pedido
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Cliente
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.cliente || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Telefone
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.telefone || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Documento Cliente
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.documentoCliente || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Oferta
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.oferta || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Última Cobrança
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.dataNegociacao || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Valor da Venda
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#4caf50' }}>
+                      R$ {selectedOrder.valorVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Código de Rastreio
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.codigoRastreio || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Vendedor
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.vendedor || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Operador
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.operador || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Zap
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.zap || '-'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              {/* Endereço de Entrega */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  mb: 3, 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  bgcolor: 'white'
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
+                  Endereço de Entrega
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Rua
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.ruaDestinatario}, {selectedOrder.numeroEnderecoDestinatario}
+                    </Typography>
+                  </Grid>
+                  
+                  {selectedOrder.complementoDestinatario && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                        Complemento
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {selectedOrder.complementoDestinatario}
+                      </Typography>
+                    </Grid>
+                  )}
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Bairro
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.bairroDestinatario}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      CEP
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.cepDestinatario}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Cidade
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.cidadeDestinatario}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Estado
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.estadoDestinatario}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Última Atualização
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.ultimaAtualizacao || '-'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              {/* Informações de Pagamento */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  mb: 3, 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  bgcolor: 'white'
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
+                  Pagamento
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Valor Recebido
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#4caf50' }}>
+                      R$ {selectedOrder.valorRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Forma de Pagamento
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.formaPagamento || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  {selectedOrder.parcial && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                        Pagamento Parcial
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        R$ {selectedOrder.pagamentoParcial.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Grid>
+                  )}
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Data Recebimento
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.dataRecebimento || '-'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                      Data Negociação
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {selectedOrder.dataNegociacao || '-'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              {/* Formulário de Edição (visível apenas em modo de edição) */}
+              {editMode && (
+                <Paper 
+                  elevation={0} 
+                  sx={{ 
+                    p: 2, 
+                    mb: 3, 
+                    borderRadius: 2,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    bgcolor: 'white',
+                    borderLeft: '4px solid #3f51b5'
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
+                    Editar Informações
+                  </Typography>
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField 
+                        label="Valor Recebido"
+                        defaultValue={selectedOrder.valorRecebido}
+                        fullWidth
+                        size="small"
+                        type="number"
+                        InputProps={{
+                          startAdornment: <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>R$</Box>,
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField 
+                        label="Data de Negociação"
+                        defaultValue={selectedOrder.dataNegociacao}
+                        fullWidth
+                        size="small"
+                        placeholder="DD/MM/AAAA"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField 
+                        label="Forma de Pagamento"
+                        defaultValue={selectedOrder.formaPagamento}
+                        fullWidth
+                        size="small"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button 
+                        variant="contained" 
+                        color="primary"
+                        sx={{ 
+                          mt: 1,
+                          borderRadius: 1.5,
+                          textTransform: 'none', 
+                        }}
+                      >
+                        Salvar Alterações
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              )}
+              
+              {/* Histórico de Cobrança */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  bgcolor: 'white',
+                  overflow: 'hidden'
+                }}
+              >
+                <Box sx={{ p: 2, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                  <Typography variant="subtitle2" sx={{ color: '#637381', fontWeight: 600 }}>
+                    Histórico de Cobrança
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ p: 2, bgcolor: 'rgba(0,0,0,0.02)' }}>
+                  <TextField
+                    id="observacao-field"
+                    label="Nova observação"
+                    multiline
+                    rows={2}
+                    value={newObservacao}
+                    onChange={(e) => setNewObservacao(e.target.value)}
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    sx={{ 
+                      mb: 1.5,
+                      '.MuiOutlinedInput-root': {
+                        bgcolor: 'white',
+                      } 
+                    }}
+                  />
+                  
+                  <Button 
+                    variant="contained" 
+                    color="primary"
+                    onClick={handleAddCobranca}
+                    disabled={!newObservacao.trim()}
+                    size="small"
+                    sx={{ 
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                    }}
+                  >
+                    Adicionar Registro
+                  </Button>
+                </Box>
+                
+                <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {historicoCobranca.map((item, index) => (
+                    <React.Fragment key={index}>
+                      <ListItem 
+                        alignItems="flex-start"
+                        sx={{ 
+                          py: 1.5,
+                          px: 2,
+                          '&:hover': { bgcolor: 'rgba(0,0,0,0.02)' },
+                        }}
+                      >
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {item.data}
+                              </Typography>
+                              <StatusChip status={item.situacao} />
+                            </Box>
+                          }
+                          secondary={
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary"
+                              sx={{ 
+                                display: 'block',
+                                bgcolor: 'rgba(0,0,0,0.02)',
+                                p: 1,
+                                borderRadius: 1,
+                                mt: 0.5
+                              }}
+                            >
+                              {item.observacao}
+                            </Typography>
+                          }
+                        />
+                      </ListItem>
+                      {index < historicoCobranca.length - 1 && (
+                        <Divider component="li" sx={{ borderStyle: 'dashed' }} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                  {historicoCobranca.length === 0 && (
+                    <ListItem sx={{ py: 3 }}>
+                      <ListItemText
+                        primary={
+                          <Typography 
+                            align="center" 
+                            color="text.secondary"
+                            sx={{ fontStyle: 'italic' }}
+                          >
+                            Nenhum histórico de cobrança registrado
+                          </Typography>
+                        }
+                      />
+                    </ListItem>
+                  )}
+                </List>
+              </Paper>
+            </Box>
+          </>
+        )}
+      </Drawer>
+    </>
+  );
+};
+
+export default OrdersTable; 
