@@ -18,6 +18,8 @@ from app.core.config import settings
 # Import all models for Alembic to detect
 from app.models.user import User
 from app.models.order import Order, BillingHistory
+from app.models.setting import Setting
+from app.models.tracking_history import TrackingHistory
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

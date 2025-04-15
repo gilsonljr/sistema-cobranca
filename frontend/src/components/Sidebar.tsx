@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Drawer,
   List,
@@ -28,9 +28,15 @@ import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import HomeIcon from '@mui/icons-material/Home';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import CodeIcon from '@mui/icons-material/Code';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import CategoryIcon from '@mui/icons-material/Category';
+import AuthService from '../services/AuthService';
 import { Order } from '../types/Order';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 export interface StatusFilter {
   field: string;
@@ -46,42 +52,109 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatus }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isSeller, setIsSeller] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSupervisor, setIsSupervisor] = useState(false);
+  const [isOperator, setIsOperator] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
+
+  // Verificar o papel do usuário e obter informações adicionais
+  useEffect(() => {
+    setIsSeller(AuthService.isSeller());
+    setIsAdmin(AuthService.isAdmin());
+    setIsSupervisor(AuthService.isSupervisor());
+    setIsOperator(AuthService.isCollector());
+    
+    // Obter informações do usuário logado para filtrar vendas por vendedor/operador
+    const userInfo = AuthService.getUserInfo();
+    if (userInfo) {
+      setCurrentUserEmail(userInfo.email);
+      setCurrentUserName(userInfo.fullName);
+      console.log("Current user:", userInfo.fullName, userInfo.role);
+    }
+  }, []);
+
+  // Função para filtrar pedidos baseado no papel do usuário
+  const filterOrdersByUserRole = (ordersToFilter: Order[]): Order[] => {
+    // Se for admin ou supervisor, mostrar todos os pedidos
+    if (isAdmin || isSupervisor) {
+      return ordersToFilter;
+    }
+    
+    // Se for vendedor, mostrar apenas pedidos do próprio vendedor
+    if (isSeller) {
+      return ordersToFilter.filter(order => {
+        // Filtrar por nome exato ou por email (se o nome do vendedor for o email)
+        return order.vendedor === currentUserName || 
+               order.vendedor === currentUserEmail;
+      });
+    }
+    
+    // Se for operador, mostrar apenas pedidos atribuídos a este operador
+    if (isOperator) {
+      return ordersToFilter.filter(order => {
+        return order.operador === currentUserName || 
+               order.operador === currentUserEmail;
+      });
+    }
+    
+    // Caso padrão, retornar todos os pedidos
+    return ordersToFilter;
+  }
+
+  // Filtrar pedidos baseado no papel do usuário antes de contar
+  const filteredOrdersByRole = filterOrdersByUserRole(orders);
 
   const getStatusCount = (status: string) => {
-    return orders.filter(order =>
+    return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === status.toLowerCase()
     ).length;
   };
 
   const getTotalOrders = () => {
-    return orders.filter(order => !!order.idVenda).length;
+    return filteredOrdersByRole.filter(order => 
+      !!order.idVenda && 
+      (!order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado')
+    ).length;
   };
 
+  // Todos os métodos abaixo excluem pedidos com status "Deletado" para garantir
+  // que esses pedidos não interfiram em nenhum relatório ou contagem total
+  // conforme requisito do cliente.
+  
   const getPendingPayments = () => {
-    return orders.filter(order =>
+    return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'pagamento pendente'
     ).length;
   };
 
   const getCompletedOrders = () => {
-    return orders.filter(order =>
+    return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'completo'
     ).length;
   };
 
   const getCanceledOrders = () => {
-    return orders.filter(order =>
+    return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'cancelado'
     ).length;
   };
 
+  const getDeletedOrders = () => {
+    return filteredOrdersByRole.filter(order =>
+      typeof order.situacaoVenda === 'string' &&
+      order.situacaoVenda.toLowerCase() === 'deletado'
+    ).length;
+  };
+
   const getReceiveToday = () => {
     const today = new Date().toLocaleDateString('pt-BR');
-    return orders.filter(order => order.dataRecebimento === today).length;
+    return filteredOrdersByRole.filter(order => order.dataRecebimento === today).length;
   };
 
   const statusItems = [
@@ -102,6 +175,11 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
     { text: 'Possíveis Duplicados', icon: <ContentCopyOutlinedIcon sx={{ color: '#FF9800' }} />, count: getStatusCount('Possíveis Duplicados'), filter: { field: 'situacaoVenda', value: 'possíveis duplicados' } },
   ];
 
+  // Item adicional apenas para administradores
+  const adminStatusItems = [
+    { text: 'Deletado', icon: <DeleteIcon sx={{ color: '#F44336' }} />, count: getDeletedOrders(), filter: { field: 'situacaoVenda', value: 'deletado' } },
+  ];
+
   // Helper function to compare filters
   const isFilterEqual = (a: StatusFilter | null, b: StatusFilter | null) => {
     if (a === null && b === null) return true;
@@ -116,21 +194,21 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
 
     // Se for um filtro de status, mostrar estatísticas de contagem
     if (filter && filter.field === 'situacaoVenda') {
-      const count = orders.filter(order =>
+      const count = filteredOrdersByRole.filter(order =>
         typeof order.situacaoVenda === 'string' &&
         order.situacaoVenda.toLowerCase() === filter.value.toLowerCase()
       ).length;
-
-      console.log(`Pedidos com status '${filter.value}': ${count}`);
-      console.log("Exemplos de pedidos:", orders
-        .filter(order => order.situacaoVenda)
-        .slice(0, 3)
-        .map(o => ({ id: o.idVenda, status: o.situacaoVenda }))
-      );
+      
+      console.log(`Contagem para ${filter.value}: ${count}`);
     }
 
+    // Atualizar o filtro selecionado
     onStatusSelect(filter);
-    navigate('/');  // Navega para a rota padrão (dashboard) com o filtro selecionado
+    
+    // Se não estiver na dashboard, navegar para lá
+    if (location.pathname !== '/') {
+      navigate('/');
+    }
   };
 
   return (
@@ -139,111 +217,214 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
       sx={{
         width: 240,
         flexShrink: 0,
-        [`& .MuiDrawer-paper`]: { width: 240, boxSizing: 'border-box', pt: 8 },
+        [`& .MuiDrawer-paper`]: {
+          width: 240,
+          boxSizing: 'border-box',
+          pt: 8,
+          border: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          bgcolor: '#FAFBFC'
+        },
       }}
     >
-      <List sx={{ pt: 2 }}>
-        <ListItem button component={Link} to="/tracking" selected={location.pathname === '/tracking'}>
+      <List sx={{ pt: 2, px: 1.5 }}>
+        <ListItem
+          button
+          component={Link}
+          to="/"
+          selected={location.pathname === '/'}
+          sx={{
+            borderRadius: '8px',
+            mb: 0.5,
+            '&.Mui-selected': {
+              bgcolor: 'rgba(33, 150, 243, 0.05)',
+              '&:hover': {
+                bgcolor: 'rgba(33, 150, 243, 0.08)'
+              }
+            },
+            '&:hover': {
+              bgcolor: 'rgba(0, 0, 0, 0.02)'
+            }
+          }}
+        >
           <ListItemIcon>
-            <LocalShippingIcon color={location.pathname === '/tracking' ? 'primary' : 'inherit'} />
+            <HomeIcon color={location.pathname === '/' ? 'primary' : 'inherit'} />
           </ListItemIcon>
-          <ListItemText primary="Rastreamento" />
+          <ListItemText primary="Tela Inicial" />
         </ListItem>
 
-        <ListItem button component={Link} to="/duplicates" selected={location.pathname === '/duplicates'}>
-          <ListItemIcon>
-            <ContentCopyIcon color={location.pathname === '/duplicates' ? 'primary' : 'inherit'} />
-          </ListItemIcon>
-          <ListItemText primary="Pedidos Duplicados" />
-        </ListItem>
+        {/* Mostrar link para página de vendedor apenas para vendedores */}
+        {isSeller && (
+          <ListItem
+            button
+            component={Link}
+            to="/vendedor"
+            selected={location.pathname === '/vendedor'}
+            sx={{
+              borderRadius: '8px',
+              mb: 0.5,
+              '&.Mui-selected': {
+                bgcolor: 'rgba(33, 150, 243, 0.05)',
+                '&:hover': {
+                  bgcolor: 'rgba(33, 150, 243, 0.08)'
+                }
+              },
+              '&:hover': {
+                bgcolor: 'rgba(0, 0, 0, 0.02)'
+              }
+            }}
+          >
+            <ListItemIcon>
+              <ShoppingCartIcon color={location.pathname === '/vendedor' ? 'primary' : 'inherit'} />
+            </ListItemIcon>
+            <ListItemText primary="Meus Pedidos" />
+          </ListItem>
+        )}
 
-        <ListItem button component={Link} to="/example" selected={location.pathname === '/example'}>
-          <ListItemIcon>
-            <CodeIcon color={location.pathname === '/example' ? 'primary' : 'inherit'} />
-          </ListItemIcon>
-          <ListItemText primary="Exemplo de Componentes" />
-        </ListItem>
+        {/* Mostrar link para pedidos duplicados apenas para admin e supervisor */}
+        {(isAdmin || isSupervisor) && (
+          <>
+            <ListItem button component={Link} to="/duplicates" selected={location.pathname === '/duplicates'}>
+              <ListItemIcon>
+                <ContentCopyIcon color={location.pathname === '/duplicates' ? 'primary' : 'inherit'} />
+              </ListItemIcon>
+              <ListItemText primary="Pedidos Duplicados" />
+            </ListItem>
+
+            <ListItem
+              button
+              component={Link}
+              to="/products"
+              selected={location.pathname === '/products'}
+              sx={{
+                borderRadius: '8px',
+                mb: 0.5,
+                '&.Mui-selected': {
+                  bgcolor: 'rgba(33, 150, 243, 0.05)',
+                  '&:hover': {
+                    bgcolor: 'rgba(33, 150, 243, 0.08)'
+                  }
+                },
+                '&:hover': {
+                  bgcolor: 'rgba(0, 0, 0, 0.02)'
+                }
+              }}
+            >
+              <ListItemIcon>
+                <CategoryIcon color={location.pathname === '/products' ? 'primary' : 'inherit'} />
+              </ListItemIcon>
+              <ListItemText primary="Produtos e Ofertas" />
+            </ListItem>
+          </>
+        )}
       </List>
 
       <Divider sx={{ my: 2 }} />
 
-      <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
-        <Typography
-          variant="subtitle2"
-          sx={{
-            px: 1,
-            mb: 2,
-            color: '#2c3e50',
-            fontSize: '0.9rem',
-            fontWeight: 600,
-          }}
-        >
-          Status do Pedido
-        </Typography>
-        <List sx={{ p: 0 }}>
-          {statusItems.map((item) => {
-            const isSelected = isFilterEqual(selectedStatus, item.filter);
-            return (
-              <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
-                <ListItemButton
-                  onClick={() => handleStatusClick(item.filter)}
-                  selected={isSelected}
+      <Box sx={{ overflowY: 'auto', flexGrow: 1, pl: 1.5, pr: 1.5, pb: 1.5 }}>
+        <Box sx={{ mt: 2, mb: 1 }}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              pl: 2,
+              pb: 1.5,
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              letterSpacing: '0.05em',
+              color: '#64748B',
+            }}
+          >
+            Filtros de Status
+          </Typography>
+          <List
+            sx={{
+              p: 0,
+              '& .MuiListItem-root': {
+                borderRadius: '8px',
+                mb: 0.5,
+                '&.Mui-selected': {
+                  bgcolor: 'rgba(33, 150, 243, 0.1)',
+                  '&:hover': {
+                    bgcolor: 'rgba(33, 150, 243, 0.12)'
+                  }
+                },
+                '&:hover': {
+                  bgcolor: 'rgba(0, 0, 0, 0.02)'
+                }
+              },
+            }}
+          >
+            {statusItems.map((item, index) => (
+              <ListItem
+                button
+                key={index}
+                selected={!!(selectedStatus && isFilterEqual(selectedStatus, item.filter))}
+                onClick={() => handleStatusClick(item.filter)}
+                sx={{ py: 1 }}
+              >
+                <ListItemIcon sx={{ minWidth: 45 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText
+                  primary={item.text}
+                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                />
+                <Chip
+                  label={item.count}
+                  size="small"
                   sx={{
-                    py: 0.75,
-                    px: { xs: 1, sm: 1.5 },
-                    borderRadius: 1,
-                    '&:hover': {
-                      bgcolor: 'rgba(33, 150, 243, 0.05)',
-                    },
-                    '&.Mui-selected': {
-                      bgcolor: 'rgba(33, 150, 243, 0.1)',
-                      '&:hover': {
-                        bgcolor: 'rgba(33, 150, 243, 0.15)',
-                      },
-                    },
+                    height: 20,
+                    fontSize: '0.70rem',
+                    bgcolor: 'rgba(0, 0, 0, 0.04)',
+                    color: '#64748B',
+                    fontWeight: 600,
                   }}
-                >
-                  <ListItemIcon sx={{ minWidth: { xs: 24, sm: 28 } }}>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.text}
-                    primaryTypographyProps={{
-                      fontSize: { xs: '0.78rem', sm: '0.83rem' },
-                      fontWeight: isSelected ? 600 : 500,
-                      color: isSelected ? 'primary.main' : 'text.primary',
-                      noWrap: false,
-                    }}
-                    sx={{
-                      mr: 1,
-                      '& .MuiTypography-root': {
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word'
-                      }
-                    }}
-                  />
-                  <Chip
-                    label={item.count}
-                    size="small"
-                    sx={{
-                      bgcolor: isSelected ? 'rgba(33, 150, 243, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-                      color: isSelected ? 'primary.main' : 'text.secondary',
-                      fontSize: '0.7rem',
-                      height: 20,
-                      minWidth: '28px',
-                      fontWeight: 500,
-                      flexShrink: 0,
-                      '& .MuiChip-label': {
-                        px: 1,
-                        overflow: 'visible',
-                      },
-                    }}
-                  />
-                </ListItemButton>
+                />
               </ListItem>
-            );
-          })}
-        </List>
+            ))}
+            
+            {/* Item adicional apenas para administradores */}
+            {isAdmin && adminStatusItems.map((item, index) => (
+              <ListItem
+                button
+                key={`admin-${index}`}
+                selected={!!(selectedStatus && isFilterEqual(selectedStatus, item.filter))}
+                onClick={() => handleStatusClick(item.filter)}
+                sx={{
+                  py: 1,
+                  mt: 1,
+                  borderTop: '1px dashed rgba(0, 0, 0, 0.12)',
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 45 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText
+                  primary={item.text}
+                  primaryTypographyProps={{
+                    fontSize: '0.875rem', 
+                    fontWeight: 600,
+                    color: '#D32F2F' 
+                  }}
+                />
+                <Chip
+                  label={item.count}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.70rem',
+                    bgcolor: 'rgba(211, 47, 47, 0.1)',
+                    color: '#D32F2F',
+                    fontWeight: 600,
+                  }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
       </Box>
     </Drawer>
   );

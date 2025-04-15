@@ -3,6 +3,7 @@ import { Container, Typography, Box, Button, CircularProgress, TextField, Paper,
 import PageHeader from '../components/PageHeader';
 import TrackingDashboard from '../components/TrackingDashboard';
 import OrdersTable from '../components/OrdersTable';
+import TrackingHistory from '../components/TrackingHistory';
 import { Order } from '../types/Order';
 import api from '../services/api';
 import CorreiosService from '../services/CorreiosService';
@@ -93,7 +94,8 @@ const TrackingPage: React.FC = () => {
             updatedOrders[index] = {
               ...updatedOrders[index],
               statusCorreios: update.newStatus,
-              statusCritico: update.isCritical
+              statusCritico: update.isCritical,
+              atualizacaoCorreios: update.formattedTimestamp || ''
             };
           }
         }
@@ -148,6 +150,10 @@ const TrackingPage: React.FC = () => {
             />
           </Box>
 
+          <Box mb={4}>
+            <TrackingHistory orders={orders} maxEntries={10} />
+          </Box>
+
           <Paper
             elevation={0}
             sx={{
@@ -182,7 +188,18 @@ const TrackingPage: React.FC = () => {
               </Box>
             </Box>
 
-            <OrdersTable orders={filteredOrders} />
+            <OrdersTable
+              orders={filteredOrders}
+              onOrderUpdate={(updatedOrder) => {
+                // Update the order in the orders array
+                const updatedOrders = [...orders];
+                const index = updatedOrders.findIndex(order => order.idVenda === updatedOrder.idVenda);
+                if (index !== -1) {
+                  updatedOrders[index] = updatedOrder;
+                  setOrders(updatedOrders);
+                }
+              }}
+            />
           </Paper>
         </>
       )}

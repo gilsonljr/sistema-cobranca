@@ -1,0 +1,407 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Grid, Paper, Typography, Box, 
+  Card, CardContent, Tabs, Tab,
+  FormControl, InputLabel, Select, MenuItem,
+  SelectChangeEvent
+} from '@mui/material';
+import {
+  LineChart, Line, BarChart, Bar, PieChart, Pie, 
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  ResponsiveContainer, Cell
+} from 'recharts';
+import { Order } from '../../types/Order';
+
+// Cores para os gráficos
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B6B'];
+
+interface AnalyticsDashboardProps {
+  orders: Order[];
+  startDate?: Date;
+  endDate?: Date;
+}
+
+const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ 
+  orders, startDate, endDate 
+}) => {
+  const [timeFrame, setTimeFrame] = useState('daily');
+  const [viewType, setViewType] = useState('performance');
+  
+  // Dados processados para os gráficos
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const [conversionData, setConversionData] = useState<any[]>([]);
+  const [operatorData, setOperatorData] = useState<any[]>([]);
+  const [statusDistribution, setStatusDistribution] = useState<any[]>([]);
+  
+  // Processar dados com base no timeFrame selecionado
+  useEffect(() => {
+    processPerformanceData();
+    processConversionData();
+    processOperatorData();
+    processStatusDistribution();
+  }, [orders, timeFrame, startDate, endDate]);
+  
+  const processPerformanceData = () => {
+    // Simulação de dados para o gráfico de performance
+    const data = [];
+    const now = new Date();
+    
+    // Gerar dados para os últimos 7, 30 ou 90 dias dependendo do timeFrame
+    let days = 7;
+    if (timeFrame === 'weekly') days = 7;
+    else if (timeFrame === 'monthly') days = 30;
+    else if (timeFrame === 'quarterly') days = 90;
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (days - i - 1));
+      
+      // Filtrar pedidos para esta data
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOrders = orders.filter(order => {
+        const orderDate = new Date(order.dataVenda);
+        return orderDate.toISOString().split('T')[0] === dateStr;
+      });
+      
+      // Calcular valores para o dia
+      const vendas = dayOrders.reduce((sum, order) => sum + order.valorVenda, 0);
+      const recebimentos = dayOrders.reduce((sum, order) => sum + order.valorRecebido, 0);
+      
+      data.push({
+        date: date.toLocaleDateString('pt-BR'),
+        vendas,
+        recebimentos,
+        pedidos: dayOrders.length
+      });
+    }
+    
+    setPerformanceData(data);
+  };
+  
+  const processConversionData = () => {
+    // Simulação de dados para o gráfico de conversão
+    const data = [];
+    const now = new Date();
+    
+    // Gerar dados para os últimos 7, 30 ou 90 dias dependendo do timeFrame
+    let days = 7;
+    if (timeFrame === 'weekly') days = 7;
+    else if (timeFrame === 'monthly') days = 30;
+    else if (timeFrame === 'quarterly') days = 90;
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (days - i - 1));
+      
+      // Filtrar pedidos para esta data
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOrders = orders.filter(order => {
+        const orderDate = new Date(order.dataVenda);
+        return orderDate.toISOString().split('T')[0] === dateStr;
+      });
+      
+      // Calcular taxas de conversão
+      const total = dayOrders.length || 1; // Evitar divisão por zero
+      const completos = dayOrders.filter(o => o.situacaoVenda?.toLowerCase() === 'completo').length;
+      const parciais = dayOrders.filter(o => o.situacaoVenda?.toLowerCase() === 'parcial').length;
+      const pendentes = dayOrders.filter(o => o.situacaoVenda?.toLowerCase() === 'pendente').length;
+      
+      data.push({
+        date: date.toLocaleDateString('pt-BR'),
+        taxaCompleto: (completos / total) * 100,
+        taxaParcial: (parciais / total) * 100,
+        taxaPendente: (pendentes / total) * 100,
+        total
+      });
+    }
+    
+    setConversionData(data);
+  };
+  
+  const processOperatorData = () => {
+    // Simulação de dados para o gráfico de operadores
+    // Em um cenário real, você teria dados reais de operadores
+    const operadores = [
+      { id: 1, nome: 'João Silva' },
+      { id: 2, nome: 'Maria Oliveira' },
+      { id: 3, nome: 'Pedro Santos' },
+      { id: 4, nome: 'Ana Souza' },
+      { id: 5, nome: 'Carlos Ferreira' }
+    ];
+    
+    const data = operadores.map(op => {
+      // Filtrar pedidos por operador (simulado)
+      const operadorOrders = orders.filter((_, index) => index % operadores.length === op.id - 1);
+      
+      // Calcular métricas
+      const totalPedidos = operadorOrders.length;
+      const valorTotal = operadorOrders.reduce((sum, order) => sum + order.valorVenda, 0);
+      const valorRecebido = operadorOrders.reduce((sum, order) => sum + order.valorRecebido, 0);
+      const taxaConversao = totalPedidos ? (valorRecebido / valorTotal) * 100 : 0;
+      
+      return {
+        id: op.id,
+        nome: op.nome,
+        totalPedidos,
+        valorTotal,
+        valorRecebido,
+        taxaConversao: Math.round(taxaConversao)
+      };
+    });
+    
+    setOperatorData(data);
+  };
+  
+  const processStatusDistribution = () => {
+    // Calcular distribuição de status
+    const statusCounts: Record<string, number> = {};
+    
+    orders.forEach(order => {
+      const status = order.situacaoVenda || 'Desconhecido';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    
+    const data = Object.entries(statusCounts).map(([status, count]) => ({
+      status,
+      value: count
+    }));
+    
+    setStatusDistribution(data);
+  };
+  
+  const handleTimeFrameChange = (event: SelectChangeEvent) => {
+    setTimeFrame(event.target.value);
+  };
+  
+  const handleViewTypeChange = (_event: React.SyntheticEvent, newValue: string) => {
+    setViewType(newValue);
+  };
+  
+  return (
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h5" fontWeight={600}>
+          Dashboard Analítico
+        </Typography>
+        
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Período</InputLabel>
+            <Select
+              value={timeFrame}
+              label="Período"
+              onChange={handleTimeFrameChange}
+            >
+              <MenuItem value="daily">Diário</MenuItem>
+              <MenuItem value="weekly">Semanal</MenuItem>
+              <MenuItem value="monthly">Mensal</MenuItem>
+              <MenuItem value="quarterly">Trimestral</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Box>
+      
+      <Tabs
+        value={viewType}
+        onChange={handleViewTypeChange}
+        sx={{ mb: 3 }}
+      >
+        <Tab label="Performance" value="performance" />
+        <Tab label="Conversão" value="conversion" />
+        <Tab label="Operadores" value="operators" />
+      </Tabs>
+      
+      {viewType === 'performance' && (
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Tendência de Vendas e Recebimentos
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={performanceData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="vendas" name="Vendas" stroke="#8884d8" />
+                  <Line type="monotone" dataKey="recebimentos" name="Recebimentos" stroke="#82ca9d" />
+                </LineChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Distribuição por Status
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={statusDistribution}
+                    dataKey="value"
+                    nameKey="status"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    label={({status, value}: {status: string, value: number}) => `${status}: ${value}`}
+                  >
+                    {statusDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => Number(value).toLocaleString('pt-BR')} />
+                </PieChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Volume de Pedidos
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={performanceData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => Number(value).toLocaleString('pt-BR')} />
+                  <Legend />
+                  <Bar dataKey="pedidos" name="Número de Pedidos" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+      
+      {viewType === 'conversion' && (
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Taxa de Conversão por Dia
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={conversionData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `${Number(value).toFixed(2)}%`} />
+                  <Legend />
+                  <Bar dataKey="taxaCompleto" name="Completos" stackId="a" fill="#4caf50" />
+                  <Bar dataKey="taxaParcial" name="Parciais" stackId="a" fill="#ff9800" />
+                  <Bar dataKey="taxaPendente" name="Pendentes" stackId="a" fill="#f44336" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Evolução da Taxa de Conversão
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={conversionData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `${Number(value).toFixed(2)}%`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="taxaCompleto" name="Taxa de Conversão" stroke="#4caf50" />
+                </LineChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Volume de Pedidos por Dia
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={conversionData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => Number(value).toLocaleString('pt-BR')} />
+                  <Legend />
+                  <Bar dataKey="total" name="Total de Pedidos" fill="#2196f3" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+      
+      {viewType === 'operators' && (
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Performance por Operador
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={operatorData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="nome" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any, name: any) => {
+                    if (name === 'taxaConversao') return `${value}%`;
+                    return `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                  }} />
+                  <Legend />
+                  <Bar dataKey="valorTotal" name="Valor Total" fill="#8884d8" />
+                  <Bar dataKey="valorRecebido" name="Valor Recebido" fill="#82ca9d" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Taxa de Conversão por Operador
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={operatorData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="nome" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `${value}%`} />
+                  <Legend />
+                  <Bar dataKey="taxaConversao" name="Taxa de Conversão" fill="#ff9800" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Volume de Pedidos por Operador
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={operatorData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="nome" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => Number(value).toLocaleString('pt-BR')} />
+                  <Legend />
+                  <Bar dataKey="totalPedidos" name="Total de Pedidos" fill="#2196f3" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+    </Box>
+  );
+};
+
+export default AnalyticsDashboard;

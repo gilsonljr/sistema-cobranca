@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TableContainer,
   Table,
@@ -22,6 +22,11 @@ import {
   List,
   ListItem,
   ListItemText,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import { Order } from '../types/Order';
 import StatusChip from './StatusChip';
@@ -34,19 +39,22 @@ import PendingOutlinedIcon from '@mui/icons-material/PendingOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import useUserPermissions from '../hooks/useUserPermissions';
 
 interface OrdersTableProps {
   orders: Order[];
+  onOrderUpdate?: (updatedOrder: Order) => void;
 }
 
 // Função auxiliar para converter data BR (DD/MM/YYYY) para formato comparável
 const parseDate = (dateStr: string): Date => {
   if (!dateStr) return new Date(0); // Data mínima para valores vazios
-  
+
   const parts = dateStr.split('/');
   // Se não tiver formato DD/MM/YYYY, retornar como string
   if (parts.length !== 3) return new Date(dateStr);
-  
+
   const [day, month, year] = parts.map(Number);
   return new Date(year, month - 1, day);
 };
@@ -54,11 +62,11 @@ const parseDate = (dateStr: string): Date => {
 // Função para formatar tempo relativo
 const formatRelativeTime = (dateStr: string): string => {
   if (!dateStr) return '-';
-  
+
   try {
     const date = parseDate(dateStr);
     if (isNaN(date.getTime())) return dateStr;
-    
+
     return `há ${formatDistanceToNow(date, { locale: ptBR })}`;
   } catch (error) {
     console.error('Erro ao formatar data relativa:', error);
@@ -69,18 +77,18 @@ const formatRelativeTime = (dateStr: string): string => {
 // Verifica se o pedido está em uma situação crítica
 const isCriticalStatus = (status: string): boolean => {
   if (!status) return false;
-  
+
   const lowerStatus = status.toLowerCase();
   return (
-    lowerStatus.includes('confirmar entrega') || 
-    lowerStatus.includes('entrega falha') || 
+    lowerStatus.includes('confirmar entrega') ||
+    lowerStatus.includes('entrega falha') ||
     lowerStatus.includes('retirar nos correios')
   );
 };
 
 // Tipo para acompanhar o estado de ordenação
 type Order_Direction = 'asc' | 'desc';
-type OrderBy = 'dataVenda' | 'ultimaAtualizacao' | 'dataNegociacao' | '';
+type OrderBy = 'dataVenda' | 'ultimaAtualizacao' | 'dataNegociacao' | 'atualizacaoCorreios' | '';
 
 interface CobrancaHistorico {
   data: string;
@@ -88,14 +96,24 @@ interface CobrancaHistorico {
   situacao: string;
 }
 
-const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
-  const [orderBy, setOrderBy] = useState<OrderBy>('');
-  const [order, setOrder] = useState<Order_Direction>('asc');
+const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
+  // Definir ordenação padrão por data de venda, do mais recente para o mais antigo
+  const [orderBy, setOrderBy] = useState<OrderBy>('dataVenda');
+  const [order, setOrder] = useState<Order_Direction>('desc');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [newObservacao, setNewObservacao] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
+  // Utilizar o hook de permissões
+  const { 
+    isAdmin, 
+    canDeleteOrders, 
+    canViewDeletedOrders,
+    filterOrdersByPermission 
+  } = useUserPermissions();
+
   // Histórico de cobrança simulado (em uma aplicação real, isso viria do backend)
   const [historicoCobranca, setHistoricoCobranca] = useState<CobrancaHistorico[]>([
     {
@@ -123,108 +141,172 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
     orderBy: OrderBy
   ): (a: Order, b: Order) => number => {
     return order === 'desc'
-      ? (a, b) => compareValues(a, b, orderBy)
-      : (a, b) => -compareValues(a, b, orderBy);
+      ? (a, b) => -compareValues(a, b, orderBy) // Invertido para ordem decrescente (mais recente primeiro)
+      : (a, b) => compareValues(a, b, orderBy);
   };
 
   // Função para comparar valores
   const compareValues = (a: Order, b: Order, orderBy: OrderBy): number => {
     if (orderBy === '') return 0;
-    
-    if (orderBy === 'dataVenda' || orderBy === 'ultimaAtualizacao' || orderBy === 'dataNegociacao') {
-      const dateA = parseDate(a[orderBy] as string);
-      const dateB = parseDate(b[orderBy] as string);
+
+    if (orderBy === 'dataVenda' || orderBy === 'ultimaAtualizacao' || orderBy === 'dataNegociacao' || orderBy === 'atualizacaoCorreios') {
+      // Tratar valores vazios ou nulos
+      const valueA = a[orderBy] as string || '';
+      const valueB = b[orderBy] as string || '';
+
+      // Se ambos os valores estão vazios, considerar iguais
+      if (!valueA && !valueB) return 0;
+      // Se apenas um está vazio, colocar o vazio por último
+      if (!valueA) return 1;
+      if (!valueB) return -1;
+
+      const dateA = parseDate(valueA);
+      const dateB = parseDate(valueB);
+
+      // Comparar as datas (ordem normal - o sinal será invertido na função getComparator quando order='desc')
       return dateA.getTime() - dateB.getTime();
     }
-    
+
     return 0;
   };
 
-  // Aplicar ordenação aos pedidos
+  // Garantir que todos os pedidos tenham valores numéricos válidos
+  const validatedOrders = orders.map(order => ({
+    ...order,
+    valorVenda: order.valorVenda !== undefined && order.valorVenda !== null ? order.valorVenda : 0,
+    valorRecebido: order.valorRecebido !== undefined && order.valorRecebido !== null ? order.valorRecebido : 0,
+    pagamentoParcial: order.pagamentoParcial !== undefined && order.pagamentoParcial !== null ? order.pagamentoParcial : 0
+  }));
+
+  // Aplicar ordenação aos pedidos - sem limitação de quantidade
   const sortedOrders = orderBy
-    ? [...orders].sort(getComparator(order, orderBy))
-    : orders;
+    ? [...validatedOrders].sort(getComparator(order, orderBy))
+    : validatedOrders;
+
+  // Exibir o número total de pedidos no console para debug
+  console.log(`Total de pedidos a serem exibidos: ${sortedOrders.length}`);
+  console.log(`Ordenação atual: ${orderBy} - ${order}`);
+
+  // Verificar as primeiras datas para debug (apenas em desenvolvimento)
+  if (process.env.NODE_ENV !== 'production' && sortedOrders.length > 1 && orderBy === 'dataVenda') {
+    console.log('Primeiras datas ordenadas:');
+    sortedOrders.slice(0, 3).forEach((order, index) => {
+      console.log(`${index + 1}. ${order.dataVenda}`);
+    });
+  }
 
   const createSortHandler = (property: OrderBy) => () => {
     handleRequestSort(property);
   };
-  
+
   // Função para abrir o painel com os detalhes do pedido
-  const handleRowClick = (order: Order) => {
+  const handleOpenDrawer = (order: Order) => {
     setSelectedOrder(order);
     setDrawerOpen(true);
     setEditMode(false);
+    setNewObservacao('');
   };
-  
+
   // Função para fechar o painel
   const handleCloseDrawer = () => {
     setDrawerOpen(false);
+    setEditMode(false);
     setSelectedOrder(null);
+  };
+
+  // Alternar modo de edição
+  const handleEditClick = () => {
+    setEditMode(!editMode);
+  };
+
+  // Função para salvar as alterações no pedido
+  const handleSaveEdit = () => {
+    // Código para salvar as alterações no pedido
     setEditMode(false);
   };
-  
-  // Adicionar nova cobrança ao histórico
-  const handleAddCobranca = () => {
-    if (!newObservacao.trim() || !selectedOrder) return;
-    
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    
-    const novaCobranca: CobrancaHistorico = {
-      data: `${day}/${month}/${year} ${hours}:${minutes}`,
-      observacao: newObservacao,
-      situacao: selectedOrder.situacaoVenda
-    };
-    
-    setHistoricoCobranca([novaCobranca, ...historicoCobranca]);
-    setNewObservacao('');
-  };
-  
-  // Atualizar o status do pedido
+
+  // Função para atualizar o status do pedido
   const handleUpdateStatus = (newStatus: string) => {
-    if (!selectedOrder) return;
-    
-    // Em um app real, aqui você chamaria uma API para atualizar o status no backend
-    console.log(`Pedido ${selectedOrder.idVenda} atualizado para: ${newStatus}`);
-    
-    // Simular atualização do status
-    if (selectedOrder) {
-      selectedOrder.situacaoVenda = newStatus;
-      setSelectedOrder({...selectedOrder});
+    if (selectedOrder && onOrderUpdate) {
+      // Criar o pedido atualizado com o novo status
+      const updatedOrder = {
+        ...selectedOrder,
+        situacaoVenda: newStatus
+      };
       
-      // Adicionar registro no histórico
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
+      // Chamar o callback de atualização
+      onOrderUpdate(updatedOrder);
       
-      const novaCobranca: CobrancaHistorico = {
-        data: `${day}/${month}/${year} ${hours}:${minutes}`,
+      // Adicionar registro ao histórico de cobrança
+      const currentDate = new Date();
+      const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getFullYear()} ${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
+      
+      const newHistoricoItem: CobrancaHistorico = {
+        data: formattedDate,
         observacao: `Status atualizado para: ${newStatus}`,
         situacao: newStatus
       };
       
-      setHistoricoCobranca([novaCobranca, ...historicoCobranca]);
+      setHistoricoCobranca([newHistoricoItem, ...historicoCobranca]);
     }
   };
-  
-  // Alternar modo de edição
-  const handleToggleEditMode = () => {
-    setEditMode(!editMode);
+
+  // Função para abrir o diálogo de confirmação de exclusão
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true);
   };
+
+  // Função para cancelar a exclusão
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+  };
+
+  // Função para confirmar a exclusão
+  const handleDeleteConfirm = () => {
+    if (selectedOrder && onOrderUpdate) {
+      // Alterar o status do pedido para "Deletado"
+      const updatedOrder = {
+        ...selectedOrder,
+        situacaoVenda: 'Deletado',
+      };
+      
+      onOrderUpdate(updatedOrder);
+      setDeleteDialogOpen(false);
+      handleCloseDrawer(); // Fechar o drawer após a exclusão
+    }
+  };
+
+  // Adicionar observação ao histórico de cobrança
+  const handleAddCobranca = () => {
+    if (newObservacao.trim()) {
+      const currentDate = new Date();
+      const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getFullYear()} ${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
+      
+      const newHistoricoItem: CobrancaHistorico = {
+        data: formattedDate,
+        observacao: newObservacao.trim(),
+        situacao: selectedOrder?.situacaoVenda || 'Pendente'
+      };
+      
+      setHistoricoCobranca([newHistoricoItem, ...historicoCobranca]);
+      setNewObservacao('');
+    }
+  };
+
+  // Função para filtrar pedidos deletados e mostrar apenas para admin
+  const filterOrders = (orders: Order[]) => {
+    return filterOrdersByPermission(orders, isAdmin);
+  };
+
+  // Aplicar o filtro de pedidos deletados
+  const visibleOrders = filterOrders(sortedOrders);
 
   return (
     <>
-      <TableContainer 
-        component={Paper} 
+      <TableContainer
+        component={Paper}
         elevation={0}
-        sx={{ 
+        sx={{
           borderRadius: 2,
           overflow: 'hidden',
         }}
@@ -250,9 +332,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
               <TableCell>Rastreio</TableCell>
               <TableCell>
                 <TableSortLabel
-                  active={orderBy === 'ultimaAtualizacao'}
-                  direction={orderBy === 'ultimaAtualizacao' ? order : 'asc'}
-                  onClick={createSortHandler('ultimaAtualizacao')}
+                  active={orderBy === 'atualizacaoCorreios'}
+                  direction={orderBy === 'atualizacaoCorreios' ? order : 'asc'}
+                  onClick={createSortHandler('atualizacaoCorreios')}
                 >
                   Atualização Correios
                   <Box component="span" sx={{ border: 0, clip: 'rect(0 0 0 0)', height: 1, margin: -1, overflow: 'hidden', padding: 0, position: 'absolute', top: 20, width: 1 }}>
@@ -279,10 +361,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {sortedOrders.map((order, index) => {
+            {visibleOrders.map((order, index) => {
               const isCritical = isCriticalStatus(order.situacaoVenda);
               return (
-                <TableRow 
+                <TableRow
                   key={order.idVenda || index}
                   sx={{
                     '&:hover': {
@@ -298,7 +380,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     }),
                     cursor: 'pointer',
                   }}
-                  onClick={() => handleRowClick(order)}
+                  onClick={() => handleOpenDrawer(order)}
                 >
                   <TableCell>{order.idVenda}</TableCell>
                   <TableCell>{order.dataVenda}</TableCell>
@@ -308,15 +390,26 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   </TableCell>
                   <TableCell>
                     {order.codigoRastreio ? (
-                      <TrackingStatusChip 
+                      <TrackingStatusChip
                         trackingCode={order.codigoRastreio}
                         refreshInterval={7200000} // 2 horas
+                        onStatusUpdate={(status, formattedTimestamp) => {
+                          // Update the order with the new status and timestamp
+                          if (onOrderUpdate && formattedTimestamp) {
+                            const updatedOrder = {
+                              ...order,
+                              statusCorreios: status,
+                              atualizacaoCorreios: formattedTimestamp
+                            };
+                            onOrderUpdate(updatedOrder);
+                          }
+                        }}
                       />
                     ) : (
                       <Typography variant="body2" color="text.secondary">Sem rastreio</Typography>
                     )}
                   </TableCell>
-                  <TableCell sx={{ color: 'text.secondary' }}>{order.ultimaAtualizacao}</TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>{order.atualizacaoCorreios || '-'}</TableCell>
                   <TableCell>
                     <Tooltip title={order.dataNegociacao || "Sem cobrança"}>
                       <Typography variant="body2">
@@ -343,7 +436,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
           </TableBody>
         </Table>
       </TableContainer>
-      
+
       {/* Painel lateral com detalhes do pedido */}
       <Drawer
         anchor="right"
@@ -361,9 +454,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
         {selectedOrder && (
           <>
             {/* Cabeçalho */}
-            <Box 
-              sx={{ 
-                p: 3, 
+            <Box
+              sx={{
+                p: 3,
                 background: 'linear-gradient(to right, #f5f7ff, #eef1fd)',
                 borderBottom: '1px solid rgba(0,0,0,0.08)',
                 position: 'sticky',
@@ -375,32 +468,52 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                 <Typography variant="h6" fontWeight={600} sx={{ color: '#2c3e50' }}>
                   #{selectedOrder.idVenda}
                 </Typography>
-                <IconButton 
-                  onClick={handleCloseDrawer} 
-                  edge="end"
-                  sx={{ 
-                    bgcolor: 'rgba(0,0,0,0.05)',
-                    '&:hover': { bgcolor: 'rgba(0,0,0,0.1)' },
-                  }}
-                >
-                  <CloseIcon />
-                </IconButton>
+                <Box>
+                  {/* Botão de edição */}
+                  <IconButton
+                    aria-label="editar"
+                    onClick={handleEditClick}
+                    sx={{ color: '#2c3e50' }}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  
+                  {/* Botão de excluir apenas para admins */}
+                  {canDeleteOrders() && (
+                    <IconButton
+                      aria-label="excluir"
+                      onClick={handleDeleteClick}
+                      sx={{ color: '#d32f2f' }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  )}
+                  
+                  {/* Botão de fechar */}
+                  <IconButton
+                    aria-label="fechar"
+                    onClick={handleCloseDrawer}
+                    sx={{ color: '#2c3e50' }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </Box>
               </Box>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 {selectedOrder.dataVenda} • {selectedOrder.cliente}
               </Typography>
-              
+
               <StatusChip status={selectedOrder.situacaoVenda} />
             </Box>
-            
+
             {/* Conteúdo principal com scroll */}
             <Box sx={{ p: 3 }}>
               {/* Botões de ações rápidas */}
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  mb: 3, 
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  mb: 3,
                   borderRadius: 2,
                   border: '1px solid rgba(0,0,0,0.08)',
                   bgcolor: 'white'
@@ -409,17 +522,17 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                 <Typography variant="subtitle2" sx={{ mb: 1.5, color: '#637381', fontWeight: 600 }}>
                   Ações Rápidas
                 </Typography>
-                
+
                 <Grid container spacing={1}>
                   <Grid item xs={6} sm={3}>
-                    <Button 
-                      variant="outlined" 
+                    <Button
+                      variant="outlined"
                       startIcon={<CheckCircleOutlineIcon />}
                       onClick={() => handleUpdateStatus('Completo')}
                       color="success"
                       size="small"
                       fullWidth
-                      sx={{ 
+                      sx={{
                         borderRadius: 1.5,
                         textTransform: 'none',
                         py: 0.7,
@@ -429,14 +542,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     </Button>
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <Button 
-                      variant="outlined" 
+                    <Button
+                      variant="outlined"
                       startIcon={<PendingOutlinedIcon />}
                       onClick={() => handleUpdateStatus('Pagamento Pendente')}
                       color="warning"
                       size="small"
                       fullWidth
-                      sx={{ 
+                      sx={{
                         borderRadius: 1.5,
                         textTransform: 'none',
                         py: 0.7,
@@ -446,14 +559,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     </Button>
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <Button 
-                      variant="outlined" 
+                    <Button
+                      variant="outlined"
                       startIcon={<HandshakeOutlinedIcon />}
                       onClick={() => handleUpdateStatus('Negociação')}
                       color="info"
                       size="small"
                       fullWidth
-                      sx={{ 
+                      sx={{
                         borderRadius: 1.5,
                         textTransform: 'none',
                         py: 0.7,
@@ -463,14 +576,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     </Button>
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <Button 
-                      variant="outlined" 
+                    <Button
+                      variant="outlined"
                       startIcon={<CancelOutlinedIcon />}
                       onClick={() => handleUpdateStatus('Frustrado')}
                       color="error"
                       size="small"
                       fullWidth
-                      sx={{ 
+                      sx={{
                         borderRadius: 1.5,
                         textTransform: 'none',
                         py: 0.7,
@@ -480,8 +593,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     </Button>
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <Button 
-                      variant="outlined" 
+                    <Button
+                      variant="outlined"
                       startIcon={<EditIcon />}
                       onClick={() => {
                         const obsField = document.getElementById('observacao-field');
@@ -493,7 +606,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       color="primary"
                       size="small"
                       fullWidth
-                      sx={{ 
+                      sx={{
                         borderRadius: 1.5,
                         textTransform: 'none',
                         py: 0.7,
@@ -503,15 +616,15 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     </Button>
                   </Grid>
                 </Grid>
-                
+
                 <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button 
+                  <Button
                     variant={editMode ? "contained" : "text"}
                     startIcon={<EditIcon />}
-                    onClick={handleToggleEditMode}
+                    onClick={handleEditClick}
                     color="primary"
                     size="small"
-                    sx={{ 
+                    sx={{
                       borderRadius: 1.5,
                       textTransform: 'none',
                     }}
@@ -520,13 +633,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   </Button>
                 </Box>
               </Paper>
-              
+
               {/* Informações principais */}
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  mb: 3, 
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  mb: 3,
                   borderRadius: 2,
                   border: '1px solid rgba(0,0,0,0.08)',
                   bgcolor: 'white'
@@ -535,7 +648,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                 <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
                   Informações do Pedido
                 </Typography>
-                
+
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
@@ -545,7 +658,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.cliente || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Telefone
@@ -554,7 +667,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.telefone || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Documento Cliente
@@ -563,7 +676,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.documentoCliente || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Oferta
@@ -572,7 +685,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.oferta || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Última Cobrança
@@ -581,16 +694,18 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.dataNegociacao || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Valor da Venda
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#4caf50' }}>
-                      R$ {selectedOrder.valorVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {selectedOrder.valorVenda !== undefined && selectedOrder.valorVenda !== null
+                        ? `R$ ${selectedOrder.valorVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                        : 'R$ 0,00'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Código de Rastreio
@@ -599,7 +714,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.codigoRastreio || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Vendedor
@@ -608,7 +723,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.vendedor || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Operador
@@ -617,7 +732,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.operador || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Zap
@@ -628,13 +743,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   </Grid>
                 </Grid>
               </Paper>
-              
+
               {/* Endereço de Entrega */}
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  mb: 3, 
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  mb: 3,
                   borderRadius: 2,
                   border: '1px solid rgba(0,0,0,0.08)',
                   bgcolor: 'white'
@@ -643,7 +758,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                 <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
                   Endereço de Entrega
                 </Typography>
-                
+
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
@@ -653,7 +768,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.ruaDestinatario}, {selectedOrder.numeroEnderecoDestinatario}
                     </Typography>
                   </Grid>
-                  
+
                   {selectedOrder.complementoDestinatario && (
                     <Grid item xs={12} sm={6}>
                       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
@@ -664,7 +779,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       </Typography>
                     </Grid>
                   )}
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Bairro
@@ -673,7 +788,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.bairroDestinatario}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       CEP
@@ -682,7 +797,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.cepDestinatario}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Cidade
@@ -691,7 +806,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.cidadeDestinatario}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Estado
@@ -700,7 +815,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.estadoDestinatario}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Última Atualização
@@ -711,13 +826,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   </Grid>
                 </Grid>
               </Paper>
-              
+
               {/* Informações de Pagamento */}
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  mb: 3, 
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  mb: 3,
                   borderRadius: 2,
                   border: '1px solid rgba(0,0,0,0.08)',
                   bgcolor: 'white'
@@ -726,17 +841,19 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                 <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
                   Pagamento
                 </Typography>
-                
+
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Valor Recebido
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#4caf50' }}>
-                      R$ {selectedOrder.valorRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {selectedOrder.valorRecebido !== undefined && selectedOrder.valorRecebido !== null
+                        ? `R$ ${selectedOrder.valorRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                        : 'R$ 0,00'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Forma de Pagamento
@@ -745,18 +862,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.formaPagamento || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   {selectedOrder.parcial && (
                     <Grid item xs={12} sm={6}>
                       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                         Pagamento Parcial
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        R$ {selectedOrder.pagamentoParcial.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        {selectedOrder.pagamentoParcial !== undefined && selectedOrder.pagamentoParcial !== null
+                          ? `R$ ${selectedOrder.pagamentoParcial.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                          : 'R$ 0,00'}
                       </Typography>
                     </Grid>
                   )}
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Data Recebimento
@@ -765,7 +884,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       {selectedOrder.dataRecebimento || '-'}
                     </Typography>
                   </Grid>
-                  
+
                   <Grid item xs={12} sm={6}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       Data Negociação
@@ -776,14 +895,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   </Grid>
                 </Grid>
               </Paper>
-              
+
               {/* Formulário de Edição (visível apenas em modo de edição) */}
               {editMode && (
-                <Paper 
-                  elevation={0} 
-                  sx={{ 
-                    p: 2, 
-                    mb: 3, 
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    mb: 3,
                     borderRadius: 2,
                     border: '1px solid rgba(0,0,0,0.08)',
                     bgcolor: 'white',
@@ -793,10 +912,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
                     Editar Informações
                   </Typography>
-                  
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <TextField 
+                      <TextField
                         label="Valor Recebido"
                         defaultValue={selectedOrder.valorRecebido}
                         fullWidth
@@ -808,7 +927,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField 
+                      <TextField
                         label="Data de Negociação"
                         defaultValue={selectedOrder.dataNegociacao}
                         fullWidth
@@ -817,7 +936,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <TextField 
+                      <TextField
                         label="Forma de Pagamento"
                         defaultValue={selectedOrder.formaPagamento}
                         fullWidth
@@ -825,13 +944,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <Button 
-                        variant="contained" 
+                      <Button
+                        variant="contained"
                         color="primary"
-                        sx={{ 
+                        sx={{
                           mt: 1,
                           borderRadius: 1.5,
-                          textTransform: 'none', 
+                          textTransform: 'none',
                         }}
                       >
                         Salvar Alterações
@@ -840,11 +959,11 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                   </Grid>
                 </Paper>
               )}
-              
+
               {/* Histórico de Cobrança */}
-              <Paper 
-                elevation={0} 
-                sx={{ 
+              <Paper
+                elevation={0}
+                sx={{
                   borderRadius: 2,
                   border: '1px solid rgba(0,0,0,0.08)',
                   bgcolor: 'white',
@@ -856,7 +975,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     Histórico de Cobrança
                   </Typography>
                 </Box>
-                
+
                 <Box sx={{ p: 2, bgcolor: 'rgba(0,0,0,0.02)' }}>
                   <TextField
                     id="observacao-field"
@@ -868,21 +987,21 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     fullWidth
                     variant="outlined"
                     size="small"
-                    sx={{ 
+                    sx={{
                       mb: 1.5,
                       '.MuiOutlinedInput-root': {
                         bgcolor: 'white',
-                      } 
+                      }
                     }}
                   />
-                  
-                  <Button 
-                    variant="contained" 
+
+                  <Button
+                    variant="contained"
                     color="primary"
                     onClick={handleAddCobranca}
                     disabled={!newObservacao.trim()}
                     size="small"
-                    sx={{ 
+                    sx={{
                       borderRadius: 1.5,
                       textTransform: 'none',
                     }}
@@ -890,13 +1009,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     Adicionar Registro
                   </Button>
                 </Box>
-                
+
                 <List sx={{ maxHeight: 300, overflow: 'auto' }}>
                   {historicoCobranca.map((item, index) => (
                     <React.Fragment key={index}>
-                      <ListItem 
+                      <ListItem
                         alignItems="flex-start"
-                        sx={{ 
+                        sx={{
                           py: 1.5,
                           px: 2,
                           '&:hover': { bgcolor: 'rgba(0,0,0,0.02)' },
@@ -912,10 +1031,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                             </Box>
                           }
                           secondary={
-                            <Typography 
-                              variant="body2" 
+                            <Typography
+                              variant="body2"
                               color="text.secondary"
-                              sx={{ 
+                              sx={{
                                 display: 'block',
                                 bgcolor: 'rgba(0,0,0,0.02)',
                                 p: 1,
@@ -937,8 +1056,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
                     <ListItem sx={{ py: 3 }}>
                       <ListItemText
                         primary={
-                          <Typography 
-                            align="center" 
+                          <Typography
+                            align="center"
                             color="text.secondary"
                             sx={{ fontStyle: 'italic' }}
                           >
@@ -954,8 +1073,33 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders }) => {
           </>
         )}
       </Drawer>
+
+      {/* Diálogo de confirmação de exclusão */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">
+          Confirmar exclusão do pedido
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            Tem certeza que deseja marcar este pedido como deletado? Esta ação só poderá ser visualizada por administradores.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary">
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
+            Deletar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };
 
-export default OrdersTable; 
+export default OrdersTable;

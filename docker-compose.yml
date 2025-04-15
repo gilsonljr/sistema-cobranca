@@ -34,6 +34,8 @@ services:
       - WEBHOOK_SECRET=your-webhook-secret-change-in-production
       - CORS_ORIGINS=["http://localhost:3000", "http://localhost:80", "http://frontend"]
       - ENVIRONMENT=development
+      - CORREIOS_API_URL=https://api.correios.com.br
+      - CORREIOS_API_KEY=your-correios-api-key-here
     depends_on:
       db:
         condition: service_healthy

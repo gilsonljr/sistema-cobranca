@@ -15,6 +15,7 @@ export interface TrackingInfo {
   codigo: string;
   eventos: TrackingEvent[];
   entregue: boolean;
+  servico?: string;
 }
 
 export interface StatusUpdateResult {
@@ -24,12 +25,14 @@ export interface StatusUpdateResult {
   previousStatus?: string;
   isCritical: boolean;
   timestamp: string;
+  formattedTimestamp?: string;  // Formatted timestamp for São Paulo timezone
   location?: string;
   estimatedDelivery?: string;
+  status: string; // Add status property for compatibility
 }
 
 class CorreiosService {
-  private apiUrl = process.env.REACT_APP_CORREIOS_API_URL || 'https://api.exemplo.com/correios';
+  private apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
   // Status considerados críticos que precisam de atenção
   private criticalStatuses = [
@@ -57,21 +60,76 @@ class CorreiosService {
    */
   public async rastrearEncomenda(codigoRastreio: string): Promise<TrackingInfo> {
     try {
-      // Em produção, esta seria uma chamada real à API dos Correios
-      // Por enquanto, simulamos o retorno para desenvolvimento
+      // Obter o token de autenticação
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Usuário não autenticado');
+      }
 
-      // Simulação - em produção, descomentar o código abaixo
-      // const response = await axios.get(`${this.apiUrl}/rastreio/${codigoRastreio}`);
-      // return response.data;
+      // Configurar headers com o token
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
 
-      // Simulação para desenvolvimento
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simula delay de rede
+      // Fazer a chamada à API
+      const response = await axios.get(
+        `${this.apiUrl}/tracking/${codigoRastreio}`,
+        { headers }
+      );
 
-      return this.mockTrackingResponse(codigoRastreio);
+      // Verificar se a resposta foi bem-sucedida
+      if (response.status !== 200) {
+        throw new Error(`Erro ao rastrear encomenda: ${response.statusText}`);
+      }
+
+      return response.data;
     } catch (error) {
       console.error('Erro ao rastrear encomenda:', error);
+
+      // Se for um erro de autenticação, redirecionar para login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Sessão expirada. Por favor, faça login novamente.');
+      }
+
+      // Se for um erro de conexão ou a API estiver indisponível, usar dados simulados
+      if (axios.isAxiosError(error) && !error.response) {
+        console.warn('API indisponível, usando dados simulados');
+        return this.mockTrackingResponse(codigoRastreio);
+      }
+
       throw new Error('Não foi possível rastrear a encomenda. Tente novamente mais tarde.');
     }
+  }
+
+  /**
+   * Formata a data e hora no formato dd/mm/yyyy - hh:mm:ss (São Paulo time)
+   */
+  private formatDateTime(date: Date): string {
+    // Formatar para o fuso horário de São Paulo (GMT-3)
+    const options: Intl.DateTimeFormatOptions = {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'America/Sao_Paulo'
+    };
+
+    const formatter = new Intl.DateTimeFormat('pt-BR', options);
+    const parts = formatter.formatToParts(date);
+
+    const day = parts.find(part => part.type === 'day')?.value || '01';
+    const month = parts.find(part => part.type === 'month')?.value || '01';
+    const year = parts.find(part => part.type === 'year')?.value || '2023';
+    const hour = parts.find(part => part.type === 'hour')?.value || '00';
+    const minute = parts.find(part => part.type === 'minute')?.value || '00';
+    const second = parts.find(part => part.type === 'second')?.value || '00';
+
+    return `${day}/${month}/${year} - ${hour}:${minute}:${second}`;
   }
 
   /**
@@ -83,29 +141,115 @@ class CorreiosService {
     const resultados: StatusUpdateResult[] = [];
     const pedidosComRastreio = pedidos.filter(p => p.codigoRastreio);
 
-    for (const pedido of pedidosComRastreio) {
-      try {
-        const infoRastreio = await this.rastrearEncomenda(pedido.codigoRastreio);
+    if (pedidosComRastreio.length === 0) {
+      return resultados;
+    }
 
-        if (infoRastreio.eventos && infoRastreio.eventos.length > 0) {
+    try {
+      // Obter o token de autenticação
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Configurar headers com o token
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Extrair apenas os códigos de rastreio para a chamada em lote
+      const trackingCodes = pedidosComRastreio.map(p => p.codigoRastreio);
+
+      // Fazer a chamada à API em lote
+      const response = await axios.post(
+        `${this.apiUrl}/tracking/batch`,
+        { tracking_codes: trackingCodes },
+        { headers }
+      );
+
+      // Verificar se a resposta foi bem-sucedida
+      if (response.status !== 200) {
+        throw new Error(`Erro ao verificar atualizações: ${response.statusText}`);
+      }
+
+      // Processar os resultados
+      const batchResults = response.data;
+
+      // Para cada pedido, verificar se houve atualização
+      for (const pedido of pedidosComRastreio) {
+        const infoRastreio = batchResults[pedido.codigoRastreio];
+
+        if (infoRastreio && infoRastreio.eventos && infoRastreio.eventos.length > 0) {
           const ultimoEvento = infoRastreio.eventos[0];
           const novoStatus = ultimoEvento.status;
 
           // Se o status for diferente do atual, registra a atualização
           if (novoStatus !== pedido.statusCorreios) {
+            // Criar timestamp formatado para São Paulo
+            const now = new Date();
+            const formattedTimestamp = this.formatDateTime(now);
+
             resultados.push({
               orderId: pedido.idVenda,
               trackingCode: pedido.codigoRastreio,
               newStatus: novoStatus,
               previousStatus: pedido.statusCorreios,
               isCritical: this.isStatusCritical(novoStatus),
-              timestamp: new Date().toISOString()
+              timestamp: now.toISOString(),
+              formattedTimestamp: formattedTimestamp,
+              location: ultimoEvento.local,
+              status: novoStatus // Add status property for compatibility
             });
           }
         }
-      } catch (error) {
-        console.error(`Erro ao verificar rastreio ${pedido.codigoRastreio}:`, error);
-        // Continua para o próximo pedido mesmo se houver erro
+      }
+    } catch (error) {
+      console.error('Erro ao verificar atualizações em lote:', error);
+
+      // Se for um erro de autenticação, redirecionar para login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Sessão expirada. Por favor, faça login novamente.');
+      }
+
+      // Se for um erro de conexão ou a API estiver indisponível, usar o método individual
+      if (axios.isAxiosError(error) && !error.response) {
+        console.warn('API em lote indisponível, verificando individualmente');
+
+        // Verificar cada pedido individualmente
+        for (const pedido of pedidosComRastreio) {
+          try {
+            const infoRastreio = await this.rastrearEncomenda(pedido.codigoRastreio);
+
+            if (infoRastreio.eventos && infoRastreio.eventos.length > 0) {
+              const ultimoEvento = infoRastreio.eventos[0];
+              const novoStatus = ultimoEvento.status;
+
+              // Se o status for diferente do atual, registra a atualização
+              if (novoStatus !== pedido.statusCorreios) {
+                // Criar timestamp formatado para São Paulo
+                const now = new Date();
+                const formattedTimestamp = this.formatDateTime(now);
+
+                resultados.push({
+                  orderId: pedido.idVenda,
+                  trackingCode: pedido.codigoRastreio,
+                  newStatus: novoStatus,
+                  previousStatus: pedido.statusCorreios,
+                  isCritical: this.isStatusCritical(novoStatus),
+                  timestamp: now.toISOString(),
+                  formattedTimestamp: formattedTimestamp,
+                  location: ultimoEvento.local,
+                  status: novoStatus // Add status property for compatibility
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`Erro ao verificar rastreio ${pedido.codigoRastreio}:`, error);
+            // Continua para o próximo pedido mesmo se houver erro
+          }
+        }
       }
     }
 
@@ -198,10 +342,15 @@ class CorreiosService {
       status: 'Objeto postado'
     });
 
+    // Generate a random service type
+    const servicosTipos = ['SEDEX', 'PAC', 'SEDEX 10', 'SEDEX 12', 'SEDEX Hoje'];
+    const servicoAleatorio = servicosTipos[Math.floor(Math.random() * servicosTipos.length)];
+
     return {
       codigo: codigoRastreio,
       eventos,
-      entregue
+      entregue,
+      servico: servicoAleatorio
     };
   }
 }

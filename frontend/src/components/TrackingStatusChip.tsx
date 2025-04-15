@@ -8,19 +8,19 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 
 interface TrackingStatusChipProps {
   trackingCode: string;
-  onStatusUpdate?: (status: string) => void;
+  onStatusUpdate?: (status: string, formattedTimestamp?: string) => void;
   refreshInterval?: number; // em milissegundos, padrão é 1 hora
 }
 
-const TrackingStatusChip = ({ 
-  trackingCode, 
+const TrackingStatusChip = ({
+  trackingCode,
   onStatusUpdate,
   refreshInterval = 3600000 // 1 hora por padrão
 }: TrackingStatusChipProps) => {
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const updateTrackingStatus = async () => {
     if (!trackingCode) {
       setStatus('Sem código');
@@ -32,11 +32,37 @@ const TrackingStatusChip = ({
       setLoading(true);
       const trackingInfo = await CorreiosService.rastrearEncomenda(trackingCode);
       const lastEvent = trackingInfo.eventos[0];
-      
+
       if (lastEvent) {
         setStatus(lastEvent.status);
+
+        // Format current date/time for São Paulo timezone
+        const now = new Date();
+        const options: Intl.DateTimeFormatOptions = {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZone: 'America/Sao_Paulo'
+        };
+
+        const formatter = new Intl.DateTimeFormat('pt-BR', options);
+        const parts = formatter.formatToParts(now);
+
+        const day = parts.find(part => part.type === 'day')?.value || '01';
+        const month = parts.find(part => part.type === 'month')?.value || '01';
+        const year = parts.find(part => part.type === 'year')?.value || '2023';
+        const hour = parts.find(part => part.type === 'hour')?.value || '00';
+        const minute = parts.find(part => part.type === 'minute')?.value || '00';
+        const second = parts.find(part => part.type === 'second')?.value || '00';
+
+        const formattedTimestamp = `${day}/${month}/${year} - ${hour}:${minute}:${second}`;
+
         if (onStatusUpdate) {
-          onStatusUpdate(lastEvent.status);
+          onStatusUpdate(lastEvent.status, formattedTimestamp);
         }
       } else {
         setStatus('Não localizado');
@@ -52,7 +78,7 @@ const TrackingStatusChip = ({
 
   useEffect(() => {
     updateTrackingStatus();
-    
+
     // Configurar verificação periódica se tiver código de rastreio
     if (trackingCode) {
       const interval = setInterval(updateTrackingStatus, refreshInterval);
@@ -128,4 +154,4 @@ const TrackingStatusChip = ({
   );
 };
 
-export default TrackingStatusChip; 
+export default TrackingStatusChip;

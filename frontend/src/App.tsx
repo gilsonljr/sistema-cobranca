@@ -3,9 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
 import Box from '@mui/material/Box';
 import Navbar from './components/Navbar';
+import AuthCheck from './components/AuthCheck';
 import Sidebar, { StatusFilter } from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import ReportsPage from './pages/ReportsPage';
+import AdvancedReportsPage from './pages/AdvancedReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import TrackingPage from './pages/TrackingPage';
 import DuplicateOrdersPage from './pages/DuplicateOrdersPage';
@@ -13,347 +15,366 @@ import LoginPage from './pages/LoginPage';
 import PasswordResetPage from './pages/PasswordResetPage';
 import TestLoginPage from './pages/TestLoginPage';
 import ExamplePage from './pages/ExamplePage';
+import UsersPage from './pages/UsersPage';
+import UsersPageSimple from './pages/UsersPageSimple';
+import UsersPageBasic from './pages/UsersPageBasic';
+import UsersPageFull from './pages/UsersPageFull';
+import EditUserPage from './pages/EditUserPage';
+import NewUserPage from './pages/NewUserPage';
+import ImportPageNew from './pages/ImportPageNew';
+import VendedorPage from './pages/VendedorPage';
+import ProductsPage from './pages/ProductsPage';
+import CreateOffersPage from './pages/CreateOffersPage';
+import CheckOrdersPage from './pages/CheckOrdersPage';
+import AllOrdersPage from './pages/AllOrdersPage';
+import ProfilePage from './pages/ProfilePage';
+import RestoreDataPage from './pages/RestoreDataPage';
+import PasswordDiagnosticPage from './pages/PasswordDiagnosticPage';
+import WebhookPage from './pages/WebhookPage';
+import CorreiosApiManagementPage from './pages/CorreiosApiManagementPage';
 import { Order } from './types/Order';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { ptBR } from 'date-fns/locale'; // Import ptBR locale
 import CorreiosService from './services/CorreiosService';
 import AuthService from './services/AuthService';
+import UserPasswordService from './services/UserPasswordService';
 
 // Import custom contexts
 import { ThemeProvider } from './contexts/ThemeContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { UserProvider } from './contexts/UserContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { OrderDataProvider } from './contexts/OrderDataContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
-// Theme is now managed by ThemeContext
-/*const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#2196f3',
-      light: '#e3f2fd',
-    },
-    secondary: {
-      main: '#f50057',
-    },
-    background: {
-      default: '#fafafa',
-      paper: '#ffffff',
-    },
-    text: {
-      primary: '#2c3e50',
-      secondary: '#7f8c8d',
-    },
-    success: {
-      main: '#4caf50',
-      light: '#e8f5e9',
-    },
-    error: {
-      main: '#f44336',
-      light: '#ffebee',
-    },
-    warning: {
-      main: '#ff9800',
-      light: '#fff3e0',
-    },
-    info: {
-      main: '#03a9f4',
-      light: '#e1f5fe',
-    },
-  },
-  typography: {
-    fontFamily: [
-      'Inter',
-      '-apple-system',
-      'BlinkMacSystemFont',
-      '"Segoe UI"',
-      'Roboto',
-      '"Helvetica Neue"',
-      'Arial',
-      'sans-serif',
-    ].join(','),
-    h5: {
-      fontWeight: 600,
-      color: '#2c3e50',
-    },
-    h6: {
-      fontWeight: 500,
-      color: '#2c3e50',
-    },
-  },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.03)',
-          borderRadius: 12,
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          borderRadius: 8,
-          fontSize: '0.875rem',
-          fontWeight: 500,
-        },
-      },
-    },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          borderRadius: 6,
-          height: 28,
-        },
-      },
-    },
-    MuiTableCell: {
-      styleOverrides: {
-        root: {
-          borderBottom: '1px solid rgba(224, 224, 224, 0.4)',
-          padding: '12px 16px',
-        },
-        head: {
-          fontWeight: 600,
-          backgroundColor: '#fafafa',
-          color: '#2c3e50',
-        },
-      },
-    },
-  },
-});*/
+// Função para sincronizar usuários entre diferentes locais de armazenamento
+const syncAllUsers = () => {
+  try {
+    console.log('Sincronizando usuários entre diferentes locais de armazenamento...');
+
+    // 1. Coletar usuários de todas as fontes
+    const sources = {
+      users: localStorage.getItem('users') ? JSON.parse(localStorage.getItem('users') || '[]') : [],
+      defaultUsers: localStorage.getItem('default_users') ? JSON.parse(localStorage.getItem('default_users') || '{}') : {},
+      mockUsers: localStorage.getItem('mockUsers') ? JSON.parse(localStorage.getItem('mockUsers') || '[]') : []
+    };
+
+    // 2. Unificar usuários - apenas considerando usuários existentes
+    const emailMap = new Map();
+
+    // Adicionar usuários do contexto principal
+    sources.users.forEach((user: any) => {
+      if (user.email) {
+        emailMap.set(user.email.toLowerCase(), user);
+      }
+    });
+
+    // Adicionar usuários do sistema de emergência
+    Object.entries(sources.defaultUsers).forEach(([email, userData]: [string, any]) => {
+      const lowerEmail = email.toLowerCase();
+      if (!emailMap.has(lowerEmail)) {
+        // Converter papel para papéis
+        const papeis: string[] = [];
+        if (userData.role === 'admin') papeis.push('admin');
+        else if (userData.role === 'supervisor') papeis.push('supervisor');
+        else if (userData.role === 'collector') papeis.push('collector');
+        else if (userData.role === 'seller') papeis.push('seller');
+
+        emailMap.set(lowerEmail, {
+          id: userData.id || Date.now(),
+          nome: userData.fullName || email.split('@')[0],
+          email: email,
+          papeis: papeis,
+          permissoes: [],
+          ativo: true
+        });
+      }
+    });
+
+    // Adicionar mock users
+    sources.mockUsers.forEach((user: any) => {
+      if (user.email) {
+        const lowerEmail = user.email.toLowerCase();
+        if (!emailMap.has(lowerEmail)) {
+          // Converter perfil para papéis
+          const papeis: string[] = [];
+          if (user.perfil === 'Administrador') papeis.push('admin');
+          else if (user.perfil === 'Supervisor') papeis.push('supervisor');
+          else if (user.perfil === 'Operador') papeis.push('collector');
+          else if (user.perfil === 'Vendedor') papeis.push('seller');
+
+          emailMap.set(lowerEmail, {
+            id: user.id || Date.now(),
+            nome: user.nome || user.email.split('@')[0],
+            email: user.email,
+            papeis: papeis,
+            permissoes: [],
+            ativo: user.ativo !== undefined ? user.ativo : true
+          });
+        }
+      }
+    });
+
+    // Não vamos mais criar usuários automaticamente para vendedores/operadores 
+    // encontrados nos pedidos. Em vez disso, usaremos a página de padronização
+    // para vincular manualmente vendedores/operadores a usuários existentes.
+
+    // 3. Salvar usuários unificados
+    const unifiedUsers = Array.from(emailMap.values());
+    localStorage.setItem('users', JSON.stringify(unifiedUsers));
+
+    console.log(`Sincronização concluída: ${unifiedUsers.length} usuários unificados.`);
+    return unifiedUsers;
+  } catch (error) {
+    console.error('Erro ao sincronizar usuários:', error);
+    return [];
+  }
+};
 
 function App() {
-  const [orders, setOrders] = useState<Order[]>(() => {
-    // Tenta carregar os pedidos do localStorage ao inicializar
-    const savedOrders = localStorage.getItem('orders');
-    return savedOrders ? JSON.parse(savedOrders) : [];
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter | null>(null);
+  const drawerWidth = 240;
 
-  // Salva os pedidos no localStorage sempre que houver mudanças
+  // Syncronize users and initialize services on app start
   useEffect(() => {
-    localStorage.setItem('orders', JSON.stringify(orders));
-  }, [orders]);
+    // Sync all users
+    syncAllUsers();
+    
+    // Initialize password service to ensure consistent password storage
+    UserPasswordService.initialize();
+    console.log("UserPasswordService initialized on app start");
+  }, []);
 
-  // Verifica atualizações dos códigos de rastreio a cada 60 minutos
+  // Handle status selection
+  const handleStatusSelect = (filter: StatusFilter | null) => {
+    setSelectedStatus(filter);
+  };
+
+  // Função para limpar todos os pedidos
+  const clearAllOrders = () => {
+    setOrders([]);
+    localStorage.removeItem('orders');
+    console.log('Todos os pedidos foram removidos');
+  };
+
+  // Load orders from localStorage on component mount
   useEffect(() => {
-    const updateTrackingStatus = async () => {
-      if (orders.length === 0) return;
+    const storedOrders = localStorage.getItem('orders');
+    if (storedOrders) {
+      setOrders(JSON.parse(storedOrders));
+    }
+  }, []);
 
-      // Filtra apenas pedidos com código de rastreio válido
-      const ordersWithTracking = orders.filter(order => order.codigoRastreio && order.codigoRastreio.trim() !== '');
+  // Handle webhook messages (simulated)
+  const handleWebhook = (event: MessageEvent) => {
+    if (event.data && event.data.type === 'webhook' && event.data.order) {
+      const newOrder = event.data.order;
+      setOrders(prevOrders => {
+        const updatedOrders = [...prevOrders, newOrder];
+        localStorage.setItem('orders', JSON.stringify(updatedOrders));
+        return updatedOrders;
+      });
+    }
+  };
 
-      if (ordersWithTracking.length === 0) return;
+  // Função para mesclar pedidos novos com existentes
+  const mergeOrders = (newOrders: Order[]) => {
+    console.log(`Iniciando importação de ${newOrders.length} pedidos...`);
 
+    // Criar um mapa dos pedidos existentes por ID
+    const existingOrdersMap = new Map(orders.map(order => [order.idVenda, order]));
+
+    // Contadores para feedback
+    let newCount = 0;
+    let updatedCount = 0;
+    let ignoredCount = 0;
+
+    // Começar com os pedidos existentes
+    const updatedOrders = [...orders];
+
+    // Processar cada novo pedido
+    newOrders.forEach(newOrder => {
+      // Verificar se o pedido tem um ID válido
+      if (!newOrder.idVenda) {
+        console.warn('Pedido sem ID ignorado:', newOrder);
+        ignoredCount++;
+        return;
+      }
+
+      if (existingOrdersMap.has(newOrder.idVenda)) {
+        // Atualizar pedido existente
+        const index = updatedOrders.findIndex(o => o.idVenda === newOrder.idVenda);
+        if (index !== -1) {
+          updatedOrders[index] = newOrder;
+          updatedCount++;
+        }
+      } else {
+        // Adicionar novo pedido
+        updatedOrders.push(newOrder);
+        newCount++;
+      }
+    });
+
+    console.log(`Importação concluída: ${newCount} novos, ${updatedCount} atualizados, ${ignoredCount} ignorados`);
+
+    // Atualizar estado
+    setOrders(updatedOrders);
+
+    // Salvar no localStorage
+    localStorage.setItem('orders', JSON.stringify(updatedOrders));
+
+    // Exibir feedback com informação sobre vendedores/operadores não vinculados
+    const message = `Importação concluída com sucesso!\n${newCount} registros importados\n${updatedCount} registros atualizados\n${ignoredCount} registros ignorados\n\nTotal de pedidos no sistema: ${updatedOrders.length}\n\nSe houver novos vendedores ou operadores nos pedidos, use a página "Padronizar" para vinculá-los a usuários existentes.`;
+    
+    alert(message);
+
+    return updatedOrders;
+  };
+
+  // Set up webhook listener
+  useEffect(() => {
+    window.addEventListener('message', handleWebhook);
+    return () => {
+      window.removeEventListener('message', handleWebhook);
+    };
+  }, []);
+
+  // Check for tracking updates periodically
+  useEffect(() => {
+    const checkTrackingUpdates = async () => {
       try {
-        // Prepara os dados para consulta com o formato esperado pelo serviço
+        // Get orders with tracking codes
+        const ordersWithTracking = orders.filter(order => order.codigoRastreio);
+
+        if (ordersWithTracking.length === 0) return;
+
+        // Prepare tracking data
         const trackingData = ordersWithTracking.map(order => ({
           idVenda: order.idVenda,
           codigoRastreio: order.codigoRastreio,
           statusCorreios: order.statusCorreios || ''
         }));
 
-        // Verifica atualizações para todos os códigos
+        // Verify updates for all codes
         const updates = await CorreiosService.verificarAtualizacoes(trackingData);
 
         if (updates && updates.length > 0) {
-          // Atualiza os pedidos com as novas informações
-          const updatedOrders = [...orders];
-
-          updates.forEach((update: any) => {
-            const orderIndex = updatedOrders.findIndex(
-              order => order.codigoRastreio === update.trackingCode
-            );
-
-            if (orderIndex >= 0) {
-              updatedOrders[orderIndex] = {
-                ...updatedOrders[orderIndex],
-                statusCorreios: update.newStatus,
-                ultimaAtualizacao: new Date().toLocaleString('pt-BR'),
-                statusCritico: update.isCritical
+          // Update orders with new information
+          const updatedOrders = orders.map(order => {
+            const update = updates.find(u => u.orderId === order.idVenda);
+            if (update) {
+              return {
+                ...order,
+                statusCorreios: update.status
               };
             }
+            return order;
           });
 
           setOrders(updatedOrders);
+          localStorage.setItem('orders', JSON.stringify(updatedOrders));
         }
       } catch (error) {
-        console.error('Erro ao atualizar status de rastreio:', error);
+        console.error('Error checking tracking updates:', error);
       }
     };
 
-    // Executa imediatamente ao montar o componente
-    updateTrackingStatus();
+    // Check for updates every 30 minutes
+    const interval = setInterval(checkTrackingUpdates, 30 * 60 * 1000);
 
-    // Configura o intervalo de verificação (a cada 60 minutos)
-    const interval = setInterval(updateTrackingStatus, 60 * 60 * 1000);
+    // Initial check
+    checkTrackingUpdates();
 
     return () => clearInterval(interval);
   }, [orders]);
 
-  const handleOrdersUpdate = (newOrders: Order[]) => {
-    setOrders(newOrders);
-  };
-
-  const handleStatusSelect = (filter: StatusFilter | null) => {
-    setSelectedStatus(filter);
-  };
-
-  // Função para processar webhook
-  const processWebhookData = (webhookData: any) => {
-    // Converter dados do webhook para o formato Order
-    const newOrder: Order = {
-      dataVenda: webhookData.dataVenda || '',
-      idVenda: webhookData.idVenda || '',
-      cliente: webhookData.cliente || '',
-      telefone: webhookData.telefone || '',
-      oferta: webhookData.oferta || '',
-      valorVenda: Number(webhookData.valorVenda) || 0,
-      status: webhookData.status || '',
-      situacaoVenda: webhookData.situacaoVenda || '',
-      valorRecebido: Number(webhookData.valorRecebido) || 0,
-      historico: webhookData.historico || '',
-      ultimaAtualizacao: webhookData.ultimaAtualizacao || '',
-      codigoRastreio: webhookData.codigoRastreio || '',
-      statusCorreios: webhookData.statusCorreios || '',
-      vendedor: webhookData.vendedor || '',
-      operador: webhookData.operador || '',
-      zap: webhookData.zap || '',
-      estadoDestinatario: webhookData.estadoDestinatario || '',
-      cidadeDestinatario: webhookData.cidadeDestinatario || '',
-      ruaDestinatario: webhookData.ruaDestinatario || '',
-      cepDestinatario: webhookData.cepDestinatario || '',
-      complementoDestinatario: webhookData.complementoDestinatario || '',
-      bairroDestinatario: webhookData.bairroDestinatario || '',
-      numeroEnderecoDestinatario: webhookData.numeroEnderecoDestinatario || '',
-      dataEstimadaChegada: webhookData.dataEstimadaChegada || '',
-      codigoAfiliado: webhookData.codigoAfiliado || '',
-      nomeAfiliado: webhookData.nomeAfiliado || '',
-      emailAfiliado: webhookData.emailAfiliado || '',
-      documentoAfiliado: webhookData.documentoAfiliado || '',
-      dataRecebimento: webhookData.dataRecebimento || '',
-      dataNegociacao: webhookData.dataNegociacao || '',
-      formaPagamento: webhookData.formaPagamento || '',
-      documentoCliente: webhookData.documentoCliente || '',
-      parcial: webhookData.parcial === 'Sim' || webhookData.parcial === true,
-      pagamentoParcial: Number(webhookData.pagamentoParcial) || 0,
-      formaPagamentoParcial: webhookData.formaPagamentoParcial || '',
-      dataPagamentoParcial: webhookData.dataPagamentoParcial || '',
-    };
-
-    // Verificar se o pedido já existe
-    const existingOrderIndex = orders.findIndex(o => o.idVenda === newOrder.idVenda);
-
-    if (existingOrderIndex >= 0) {
-      // Atualizar pedido existente
-      const updatedOrders = [...orders];
-      updatedOrders[existingOrderIndex] = newOrder;
-      setOrders(updatedOrders);
-    } else {
-      // Adicionar novo pedido
-      setOrders([...orders, newOrder]);
-    }
-  };
-
-  // Função para expor endpoint de webhook
+  // Listener para o evento do emergency-fix
   useEffect(() => {
-    // Criar um handler para o webhook
-    const handleWebhook = async (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data && data.type === 'webhook' && data.payload) {
-          processWebhookData(data.payload);
-        }
-      } catch (error) {
-        console.error('Erro ao processar webhook:', error);
-      }
+    const handleEmergencyFixClearOrders = () => {
+      console.log('Recebido evento emergency-fix-clear-orders - Limpando pedidos...');
+      clearAllOrders();
     };
 
-    // Adicionar um ouvinte para receber mensagens (simulando webhook)
-    window.addEventListener('message', handleWebhook);
+    window.addEventListener('emergency-fix-clear-orders', handleEmergencyFixClearOrders);
 
     return () => {
-      window.removeEventListener('message', handleWebhook);
+      window.removeEventListener('emergency-fix-clear-orders', handleEmergencyFixClearOrders);
     };
-  }, [orders]);
+  }, [clearAllOrders]);
 
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <CssBaseline />
-        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ptBR}>
-          <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/reset-password" element={<PasswordResetPage />} />
-            <Route path="/test-login" element={<TestLoginPage />} />
-            <Route path="/*" element={
-              AuthService.isAuthenticated() ? (
-                <Box sx={{ display: 'flex' }}>
-                  <Navbar />
-                  <Sidebar
-                    orders={orders}
-                    onStatusSelect={handleStatusSelect}
-                    selectedStatus={selectedStatus}
-                  />
-                  <Box
-                    component="main"
-                    sx={{
-                      flexGrow: 1,
-                      p: 3,
-                      bgcolor: 'background.default',
-                      minHeight: '100vh',
-                      pt: 10
-                    }}
-                  >
-                    <Routes>
-                      <Route
-                        path="/"
-                        element={
-                          <DashboardPage
-                            orders={selectedStatus ?
-                              orders.filter(order => {
-                                if (selectedStatus.field === 'situacaoVenda') {
-                                  // Log para depuração
-                                  console.log(`[App.tsx] Filtrando pedido ${order.idVenda}:`,
-                                    order.situacaoVenda?.toLowerCase(), selectedStatus.value.toLowerCase(),
-                                    order.situacaoVenda?.toLowerCase() === selectedStatus.value.toLowerCase());
-
-                                  return order.situacaoVenda &&
-                                    order.situacaoVenda.toLowerCase() === selectedStatus.value.toLowerCase();
-                                } else if (selectedStatus.field === 'special' && selectedStatus.value === 'dataRecebimento') {
-                                  // Caso especial para "Receber Hoje"
-                                  const today = new Date().toLocaleDateString('pt-BR');
-                                  return order.dataRecebimento === today;
-                                }
-                                return true;
-                              }) :
-                              orders
-                            }
-                            onOrdersUpdate={handleOrdersUpdate}
-                            selectedStatus={selectedStatus}
+    <ErrorBoundary>
+      <ThemeProvider>
+        <NotificationProvider>
+          <UserProvider>
+            <AuthProvider>
+              <OrderDataProvider>
+                <CssBaseline />
+                <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ptBR}>
+                <BrowserRouter>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/reset-password" element={<PasswordResetPage />} />
+                    <Route path="/test-login" element={<TestLoginPage />} />
+                    <Route path="/*" element={
+                      <AuthCheck>
+                        <Box sx={{ display: 'flex' }}>
+                          <Navbar />
+                          <Sidebar
+                            orders={orders}
                             onStatusSelect={handleStatusSelect}
+                            selectedStatus={selectedStatus}
                           />
-                        }
-                      />
-                      <Route path="/reports" element={<ReportsPage orders={orders} />} />
-                      <Route path="/tracking" element={<TrackingPage />} />
-                      <Route path="/duplicates" element={<DuplicateOrdersPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/example" element={<ExamplePage />} />
-                    </Routes>
-                  </Box>
-                </Box>
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            } />
-          </Routes>
-          </BrowserRouter>
-        </LocalizationProvider>
-      </NotificationProvider>
-    </ThemeProvider>
+                          <Box
+                            component="main"
+                            sx={{
+                              flexGrow: 1,
+                              p: 3,
+                              width: { sm: `calc(100% - ${drawerWidth}px)` },
+                              ml: { sm: `${drawerWidth}px` },
+                              mt: '64px', // Height of the navbar
+                              overflow: 'auto',
+                              height: 'calc(100vh - 64px)'
+                            }}
+                          >
+                            <Routes>
+                              <Route path="/" element={<DashboardPage orders={orders} onOrdersUpdate={setOrders} selectedStatus={selectedStatus} onStatusSelect={handleStatusSelect} clearAllOrders={clearAllOrders} />} />
+                              <Route path="/reports" element={<ReportsPage orders={orders} />} />
+                              <Route path="/advanced-reports" element={<AdvancedReportsPage orders={orders} />} />
+                              <Route path="/tracking" element={<TrackingPage />} />
+                              <Route path="/duplicates" element={<DuplicateOrdersPage />} />
+                              <Route path="/settings" element={<SettingsPage />} />
+                              <Route path="/example" element={<ExamplePage />} />
+                              <Route path="/users" element={<UsersPageFull orders={orders} />} />
+                              <Route path="/new-user" element={<NewUserPage />} />
+                              <Route path="/edit-user/:id" element={<EditUserPage />} />
+                              <Route path="/import" element={<ImportPageNew onImportSuccess={mergeOrders} />} />
+                              <Route path="/webhook" element={<WebhookPage />} />
+                              <Route path="/vendedor" element={<VendedorPage orders={orders} onOrdersUpdate={setOrders} />} />
+                              <Route path="/products" element={<ProductsPage />} />
+                              <Route path="/create-offers" element={<CreateOffersPage />} />
+                              <Route path="/check-orders" element={<CheckOrdersPage />} />
+                              <Route path="/all-orders" element={<AllOrdersPage />} />
+                              <Route path="/profile" element={<ProfilePage />} />
+                              <Route path="/restore-data" element={<RestoreDataPage />} />
+                              <Route path="/password-diagnostic" element={<PasswordDiagnosticPage />} />
+                              <Route path="/correios-api" element={<CorreiosApiManagementPage />} />
+                            </Routes>
+                          </Box>
+                        </Box>
+                      </AuthCheck>
+                    } />
+                  </Routes>
+                </BrowserRouter>
+                </LocalizationProvider>
+              </OrderDataProvider>
+            </AuthProvider>
+          </UserProvider>
+        </NotificationProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

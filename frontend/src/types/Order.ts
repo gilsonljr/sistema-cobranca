@@ -30,6 +30,7 @@ export interface Order {
   status: string;                       // Legacy field, same as situacaoVenda
   oferta: string;                       // Product/offer description
   statusCorreios: string;               // Tracking status from Correios
+  atualizacaoCorreios: string;          // Last tracking update date/time
   statusCritico?: boolean;              // Flag for critical status
   zap: string;                          // Same as telefone, for WhatsApp
 
@@ -78,6 +79,7 @@ export const parseCSVRow = (row: any): Order => {
     ultimaAtualizacao: row['Ultima Atualização'] || '',
     codigoRastreio: row['Código de Rastreio'] || '',
     statusCorreios: row['Status Correios'] || '',
+    atualizacaoCorreios: row['Atualizacao Correios'] || '',
     vendedor: row['Vendedor'] || '',
     operador: row['Operador'] || '',
     zap: row['Zap'] || '',

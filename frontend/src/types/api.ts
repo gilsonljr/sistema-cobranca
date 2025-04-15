@@ -17,7 +17,8 @@ export enum OrderStatus {
   PARTIALLY_PAID = 'partially_paid',
   NEGOTIATING = 'negotiating',
   CANCELLED = 'cancelled',
-  DELIVERED = 'delivered'
+  DELIVERED = 'delivered',
+  DELETED = 'deleted'
 }
 
 // Order types

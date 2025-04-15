@@ -44,7 +44,7 @@ const darkTheme = {
 // Create theme with mode
 const createAppTheme = (mode: PaletteMode) => {
   const colors = mode === 'light' ? lightTheme : darkTheme;
-  
+
   return createTheme(
     {
       palette: {
@@ -62,20 +62,53 @@ const createAppTheme = (mode: PaletteMode) => {
             root: {
               textTransform: 'none',
               borderRadius: 8,
+              fontWeight: 500,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: 'none',
+              },
+            },
+            contained: {
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: 'none',
+              },
             },
           },
         },
         MuiCard: {
           styleOverrides: {
             root: {
-              borderRadius: 12,
-              boxShadow: mode === 'light' 
-                ? '0px 2px 4px rgba(0, 0, 0, 0.1)' 
-                : '0px 2px 4px rgba(0, 0, 0, 0.3)',
+              borderRadius: 10,
+              boxShadow: mode === 'light'
+                ? '0px 1px 3px rgba(0, 0, 0, 0.05)'
+                : '0px 1px 3px rgba(0, 0, 0, 0.2)',
+              border: mode === 'light' ? '1px solid rgba(0, 0, 0, 0.05)' : 'none',
             },
           },
         },
         MuiPaper: {
+          styleOverrides: {
+            root: {
+              borderRadius: 10,
+              boxShadow: mode === 'light'
+                ? '0px 1px 3px rgba(0, 0, 0, 0.05)'
+                : '0px 1px 3px rgba(0, 0, 0, 0.2)',
+            },
+          },
+        },
+        MuiTableCell: {
+          styleOverrides: {
+            root: {
+              borderBottom: mode === 'light' ? '1px solid rgba(0, 0, 0, 0.05)' : '1px solid rgba(255, 255, 255, 0.05)',
+            },
+            head: {
+              fontWeight: 600,
+              backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.05)',
+            },
+          },
+        },
+        MuiChip: {
           styleOverrides: {
             root: {
               borderRadius: 8,
@@ -111,20 +144,20 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     const savedMode = localStorage.getItem('themeMode');
     return (savedMode as PaletteMode) || 'light';
   });
-  
+
   // Create theme based on mode
   const theme = createAppTheme(mode);
-  
+
   // Toggle theme
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
   };
-  
+
   // Save theme mode to localStorage
   useEffect(() => {
     localStorage.setItem('themeMode', mode);
   }, [mode]);
-  
+
   return (
     <ThemeContext.Provider value={{ theme, mode, toggleTheme, setMode }}>
       <MuiThemeProvider theme={theme}>{children}</MuiThemeProvider>
@@ -135,10 +168,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 // Hook to use theme context
 export const useTheme = (): ThemeContextType => {
   const context = useContext(ThemeContext);
-  
+
   if (context === undefined) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
-  
+
   return context;
 };

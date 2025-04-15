@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Padronização de Nomes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        button {
+            background-color: #3f51b5;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #303f9f;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .result {
+            background-color: #f5f7ff;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #3f51b5;
+            margin: 20px 0;
+        }
+        .error {
+            background-color: #ffebee;
+            border-left-color: #f44336;
+        }
+        .warning {
+            background-color: #fff8e1;
+            border-left-color: #ffc107;
+        }
+        .tab-container {
+            margin-top: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab-button {
+            padding: 10px 15px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: #666;
+        }
+        .tab-button.active {
+            border-bottom: 3px solid #3f51b5;
+            color: #3f51b5;
+        }
+        .tab-content {
+            padding: 20px 5px;
+        }
+        .tab-pane {
+            display: none;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 20px 0;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f5f7ff;
+            font-weight: 500;
+        }
+        select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+        }
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>Padronização de Nomes no Sistema</h1>
+    
+    <div class="card">
+        <p>Esta ferramenta detecta automaticamente todos os vendedores e operadores nos pedidos e permite mapear cada um para um usuário do sistema.</p>
+        <p><strong>Como usar:</strong></p>
+        <ol>
+            <li>Selecione a aba "Vendedores", "Operadores" ou "Não Vinculados"</li>
+            <li>Para cada nome encontrado, escolha o usuário correspondente na lista</li>
+            <li>Clique em "Aplicar Padronização" para atualizar todos os pedidos</li>
+        </ol>
+        <p><strong>Aba "Não Vinculados":</strong> Esta aba mostra vendedores e operadores que não correspondem a nenhum usuário existente no sistema.</p>
+    </div>
+    
+    <div id="loading" class="result">
+        <p>Carregando dados do sistema...</p>
+    </div>
+    
+    <div id="main-content" style="display: none;">
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button active" data-tab="vendedores">Vendedores</button>
+                <button class="tab-button" data-tab="operadores">Operadores</button>
+                <button class="tab-button" data-tab="nao-vinculados">Não Vinculados</button>
+            </div>
+            
+            <div class="tab-content">
+                <div class="tab-pane active" id="vendedores">
+                    <h2>Padronização de Vendedores</h2>
+                    <div id="vendedores-table-container"></div>
+                </div>
+                
+                <div class="tab-pane" id="operadores">
+                    <h2>Padronização de Operadores</h2>
+                    <div id="operadores-table-container"></div>
+                </div>
+                
+                <div class="tab-pane" id="nao-vinculados">
+                    <h2>Vendedores e Operadores sem Usuário Vinculado</h2>
+                    <p>Esta aba mostra todos os vendedores e operadores presentes nos pedidos que não possuem um usuário correspondente no sistema.</p>
+                    <div id="nao-vinculados-container"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button id="btn-aplicar" disabled>Aplicar Padronização</button>
+        </div>
+    </div>
+    
+    <div id="resultado" class="result" style="display: none;"></div>
+    
+    <script>
+        // Elementos da UI
+        const loadingElement = document.getElementById('loading');
+        const mainContent = document.getElementById('main-content');
+        const vendedoresContainer = document.getElementById('vendedores-table-container');
+        const operadoresContainer = document.getElementById('operadores-table-container');
+        const btnAplicar = document.getElementById('btn-aplicar');
+        const resultadoElement = document.getElementById('resultado');
+        
+        // Estado da aplicação
+        let usuarios = [];
+        let vendedores = [];
+        let operadores = [];
+        let orders = [];
+        let mapeamentoVendedores = {};
+        let mapeamentoOperadores = {};
+        let naoVinculados = { vendedores: [], operadores: [] };
+        
+        // Carregar dados iniciais
+        async function carregarDados() {
+            try {
+                // Obter pedidos
+                const ordersStr = localStorage.getItem('orders');
+                if (!ordersStr) {
+                    mostrarErro('Nenhum pedido encontrado no sistema.');
+                    return false;
+                }
+                
+                orders = JSON.parse(ordersStr);
+                console.log(`Carregados ${orders.length} pedidos.`);
+                
+                // Obter usuários
+                const usersStr = localStorage.getItem('users');
+                if (!usersStr) {
+                    mostrarErro('Nenhum usuário encontrado no sistema.');
+                    return false;
+                }
+                
+                usuarios = JSON.parse(usersStr);
+                console.log(`Carregados ${usuarios.length} usuários.`);
+                
+                // Extrair vendedores únicos
+                const vendedoresUnicos = new Set();
+                orders.forEach(order => {
+                    if (order.vendedor && order.vendedor.trim() !== '') {
+                        vendedoresUnicos.add(order.vendedor.trim());
+                    }
+                });
+                vendedores = Array.from(vendedoresUnicos).sort();
+                
+                // Extrair operadores únicos
+                const operadoresUnicos = new Set();
+                orders.forEach(order => {
+                    if (order.operador && order.operador.trim() !== '') {
+                        operadoresUnicos.add(order.operador.trim());
+                    }
+                });
+                operadores = Array.from(operadoresUnicos).sort();
+                
+                console.log(`Detectados ${vendedores.length} vendedores e ${operadores.length} operadores.`);
+                
+                return true;
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+                mostrarErro(`Erro ao carregar dados: ${error.message}`);
+                return false;
+            }
+        }
+        
+        // Verificar quais vendedores e operadores não têm usuário correspondente
+        function detectarNaoVinculados() {
+            // Para vendedores
+            naoVinculados.vendedores = vendedores.filter(vendedor => {
+                // Verificar se existe usuário com esse nome exato
+                return !usuarios.some(usuario => usuario.nome === vendedor);
+            });
+            
+            // Para operadores
+            naoVinculados.operadores = operadores.filter(operador => {
+                // Verificar se existe usuário com esse nome exato
+                return !usuarios.some(usuario => usuario.nome === operador);
+            });
+            
+            console.log(`Detectados ${naoVinculados.vendedores.length} vendedores e ${naoVinculados.operadores.length} operadores sem vínculo.`);
+        }
+        
+        // Renderizar tabela de vendedores
+        function renderizarTabelaVendedores() {
+            if (vendedores.length === 0) {
+                vendedoresContainer.innerHTML = '<p>Nenhum vendedor encontrado nos pedidos.</p>';
+                return;
+            }
+            
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nome do Vendedor no Pedido</th>
+                            <th>Usuário Correspondente</th>
+                            <th>Ocorrências</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${vendedores.map(vendedor => {
+                            const count = orders.filter(o => o.vendedor === vendedor).length;
+                            return `
+                                <tr>
+                                    <td>${vendedor}</td>
+                                    <td>
+                                        <select class="select-usuario" data-tipo="vendedor" data-nome="${vendedor}">
+                                            <option value="">-- Selecione um usuário --</option>
+                                            ${usuarios.map(u => `
+                                                <option value="${u.nome}" ${u.nome === vendedor ? 'selected' : ''}>${u.nome} (${u.email})</option>
+                                            `).join('')}
+                                        </select>
+                                    </td>
+                                    <td>${count}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            vendedoresContainer.innerHTML = html;
+        }
+        
+        // Renderizar tabela de operadores
+        function renderizarTabelaOperadores() {
+            if (operadores.length === 0) {
+                operadoresContainer.innerHTML = '<p>Nenhum operador encontrado nos pedidos.</p>';
+                return;
+            }
+            
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nome do Operador no Pedido</th>
+                            <th>Usuário Correspondente</th>
+                            <th>Ocorrências</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${operadores.map(operador => {
+                            const count = orders.filter(o => o.operador === operador).length;
+                            return `
+                                <tr>
+                                    <td>${operador}</td>
+                                    <td>
+                                        <select class="select-usuario" data-tipo="operador" data-nome="${operador}">
+                                            <option value="">-- Selecione um usuário --</option>
+                                            ${usuarios.map(u => `
+                                                <option value="${u.nome}" ${u.nome === operador ? 'selected' : ''}>${u.nome} (${u.email})</option>
+                                            `).join('')}
+                                        </select>
+                                    </td>
+                                    <td>${count}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            operadoresContainer.innerHTML = html;
+        }
+        
+        // Renderizar tabela de não vinculados
+        function renderizarTabelaNaoVinculados() {
+            if (naoVinculados.vendedores.length === 0 && naoVinculados.operadores.length === 0) {
+                document.getElementById('nao-vinculados-container').innerHTML = 
+                    '<p>Todos os vendedores e operadores possuem um usuário correspondente no sistema.</p>';
+                return;
+            }
+            
+            let html = '';
+            
+            // Tabela de vendedores não vinculados
+            if (naoVinculados.vendedores.length > 0) {
+                html += `
+                    <h3>Vendedores sem Usuário</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nome do Vendedor</th>
+                                <th>Vincular a Usuário</th>
+                                <th>Ocorrências</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${naoVinculados.vendedores.map(vendedor => {
+                                const count = orders.filter(o => o.vendedor === vendedor).length;
+                                return `
+                                    <tr>
+                                        <td>${vendedor}</td>
+                                        <td>
+                                            <select class="select-usuario" data-tipo="vendedor" data-nome="${vendedor}">
+                                                <option value="">-- Selecione um usuário --</option>
+                                                ${usuarios.map(u => `
+                                                    <option value="${u.nome}">${u.nome} (${u.email})</option>
+                                                `).join('')}
+                                            </select>
+                                        </td>
+                                        <td>${count}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+            
+            // Tabela de operadores não vinculados
+            if (naoVinculados.operadores.length > 0) {
+                html += `
+                    <h3>Operadores sem Usuário</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nome do Operador</th>
+                                <th>Vincular a Usuário</th>
+                                <th>Ocorrências</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${naoVinculados.operadores.map(operador => {
+                                const count = orders.filter(o => o.operador === operador).length;
+                                return `
+                                    <tr>
+                                        <td>${operador}</td>
+                                        <td>
+                                            <select class="select-usuario" data-tipo="operador" data-nome="${operador}">
+                                                <option value="">-- Selecione um usuário --</option>
+                                                ${usuarios.map(u => `
+                                                    <option value="${u.nome}">${u.nome} (${u.email})</option>
+                                                `).join('')}
+                                            </select>
+                                        </td>
+                                        <td>${count}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+            
+            document.getElementById('nao-vinculados-container').innerHTML = html;
+        }
+        
+        // Aplicar padronização aos pedidos
+        function aplicarPadronizacao() {
+            try {
+                const updatedOrders = orders.map(order => {
+                    const novoOrder = {...order};
+                    
+                    // Atualizar vendedor
+                    if (novoOrder.vendedor && mapeamentoVendedores[novoOrder.vendedor]) {
+                        // Obter nome completo do usuário vinculado
+                        const nomeUsuario = mapeamentoVendedores[novoOrder.vendedor];
+                        novoOrder.vendedor = nomeUsuario;
+                    }
+                    
+                    // Atualizar operador
+                    if (novoOrder.operador && mapeamentoOperadores[novoOrder.operador]) {
+                        // Obter nome completo do usuário vinculado
+                        const nomeUsuario = mapeamentoOperadores[novoOrder.operador];
+                        novoOrder.operador = nomeUsuario;
+                    }
+                    
+                    return novoOrder;
+                });
+                
+                // Salvar no localStorage
+                localStorage.setItem('orders', JSON.stringify(updatedOrders));
+                
+                // Contar alterações
+                const vendedoresAlterados = Object.keys(mapeamentoVendedores).length;
+                const operadoresAlterados = Object.keys(mapeamentoOperadores).length;
+                
+                return {
+                    success: true,
+                    message: `Padronização concluída com sucesso!`,
+                    stats: {
+                        vendedores: vendedoresAlterados,
+                        operadores: operadoresAlterados,
+                        total: vendedoresAlterados + operadoresAlterados
+                    }
+                };
+            } catch (error) {
+                console.error('Erro ao aplicar padronização:', error);
+                return {
+                    success: false,
+                    message: `Erro ao aplicar padronização: ${error.message}`
+                };
+            }
+        }
+        
+        // Mostrar mensagem de erro
+        function mostrarErro(mensagem) {
+            loadingElement.classList.add('error');
+            loadingElement.innerHTML = `<p>${mensagem}</p>`;
+        }
+        
+        // Mostrar resultado
+        function mostrarResultado(resultado) {
+            resultadoElement.style.display = 'block';
+            resultadoElement.classList.remove('error');
+            
+            if (resultado.success) {
+                let html = `<p>${resultado.message}</p>`;
+                
+                if (resultado.stats) {
+                    html += `
+                        <ul>
+                            <li><strong>Vendedores padronizados:</strong> ${resultado.stats.vendedores}</li>
+                            <li><strong>Operadores padronizados:</strong> ${resultado.stats.operadores}</li>
+                            <li><strong>Total de mapeamentos:</strong> ${resultado.stats.total}</li>
+                        </ul>
+                        <p>Atualize a página principal para ver as mudanças.</p>
+                    `;
+                }
+                
+                resultadoElement.innerHTML = html;
+            } else {
+                resultadoElement.classList.add('error');
+                resultadoElement.innerHTML = `<p>${resultado.message}</p>`;
+            }
+        }
+        
+        // Configurar tabs
+        function configurarTabs() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const targetTab = this.dataset.tab;
+                    
+                    // Atualizar botões
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Atualizar painéis
+                    tabPanes.forEach(pane => {
+                        pane.classList.remove('active');
+                        if (pane.id === targetTab) {
+                            pane.classList.add('active');
+                        }
+                    });
+                });
+            });
+        }
+        
+        // Inicializar
+        async function inicializar() {
+            configurarTabs();
+            
+            const sucesso = await carregarDados();
+            if (!sucesso) return;
+            
+            // Detectar nomes não vinculados
+            detectarNaoVinculados();
+            
+            // Renderizar tabelas
+            renderizarTabelaVendedores();
+            renderizarTabelaOperadores();
+            renderizarTabelaNaoVinculados();
+            
+            // Configurar eventos
+            document.addEventListener('change', event => {
+                if (event.target.classList.contains('select-usuario')) {
+                    const tipo = event.target.dataset.tipo;
+                    const nome = event.target.dataset.nome;
+                    const valor = event.target.value;
+                    
+                    if (tipo === 'vendedor') {
+                        if (valor) {
+                            mapeamentoVendedores[nome] = valor;
+                        } else {
+                            delete mapeamentoVendedores[nome];
+                        }
+                    } else if (tipo === 'operador') {
+                        if (valor) {
+                            mapeamentoOperadores[nome] = valor;
+                        } else {
+                            delete mapeamentoOperadores[nome];
+                        }
+                    }
+                    
+                    // Habilitar botão se tiver pelo menos uma associação
+                    const temAssociacao = Object.keys(mapeamentoVendedores).length > 0 || 
+                                         Object.keys(mapeamentoOperadores).length > 0;
+                    btnAplicar.disabled = !temAssociacao;
+                }
+            });
+            
+            btnAplicar.addEventListener('click', () => {
+                const resultado = aplicarPadronizacao();
+                mostrarResultado(resultado);
+            });
+            
+            // Mostrar conteúdo principal
+            loadingElement.style.display = 'none';
+            mainContent.style.display = 'block';
+            
+            // Mostrar alerta explicativo
+            if (naoVinculados.vendedores.length > 0 || naoVinculados.operadores.length > 0) {
+                const totalNaoVinculados = naoVinculados.vendedores.length + naoVinculados.operadores.length;
+                const resultadoTmp = document.createElement('div');
+                resultadoTmp.className = 'result warning';
+                resultadoTmp.innerHTML = `
+                    <p><strong>Atenção:</strong> Existem ${totalNaoVinculados} vendedores/operadores sem vínculo com usuários.</p>
+                    <p>A partir de agora, o sistema não cria mais usuários automaticamente ao importar pedidos. Use a aba "Não Vinculados" para vincular vendedores e operadores aos usuários existentes.</p>
+                `;
+                document.body.insertBefore(resultadoTmp, resultadoElement);
+                
+                // Alterar para a aba "Não Vinculados" se tiver itens
+                if (totalNaoVinculados > 0) {
+                    const tabButtons = document.querySelectorAll('.tab-button');
+                    const tabPanes = document.querySelectorAll('.tab-pane');
+                    
+                    // Atualizar botões
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    document.querySelector('.tab-button[data-tab="nao-vinculados"]').classList.add('active');
+                    
+                    // Atualizar painéis
+                    tabPanes.forEach(pane => {
+                        pane.classList.remove('active');
+                        if (pane.id === 'nao-vinculados') {
+                            pane.classList.add('active');
+                        }
+                    });
+                }
+            }
+        }
+        
+        // Executar
+        inicializar();
+    </script>
+</body>
+</html> 

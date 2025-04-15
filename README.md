@@ -12,7 +12,7 @@ Sistema web para gerenciamento de cobranças de suplementos com pagamento na ent
 - Monitoramento de tempo de atualização
 - Suporte a pagamentos parciais e negociações
 - Sistema de filtragem por status
-- Relatórios detalhados
+- Relatórios detalhados e avançados com visualizações gráficas
 - Integração com API dos Correios
 - Detecção de pedidos duplicados
 
@@ -23,6 +23,7 @@ Sistema web para gerenciamento de cobranças de suplementos com pagamento na ent
 - Banco de Dados: PostgreSQL
 - Autenticação: JWT
 - Deploy: Docker
+- Visualização de Dados: Recharts (opcional, veja [INSTALL_RECHARTS.md](frontend/INSTALL_RECHARTS.md))
 
 ## Configuração do Ambiente
 

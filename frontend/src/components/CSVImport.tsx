@@ -1,9 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { 
-  Button, 
-  Box, 
-  Alert, 
-  CircularProgress, 
+import {
+  Button,
+  Box,
+  Alert,
+  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -38,6 +38,8 @@ const requiredHeaders = [
   'Ultima Atualização',
   'Código de Rastreio',
   'Status Correios',
+  // Aceita tanto 'Atualizacao Correios' quanto 'Ultima Atualizacao' para o mesmo campo
+  // 'Atualizacao Correios', - Removido para evitar duplicidade na validação
   'Vendedor',
   'Operador',
   'Zap',
@@ -72,7 +74,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
     orders: Order[];
     totalSales: number;
     skippedLines: number;
-    problematicLines: number[];
+    problematicLines: {lineNumber: number, reason: string}[];
   } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -80,14 +82,14 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
     // Try to detect if the file is TSV or CSV
     const isTSV = line.includes('\t') && !line.includes(',');
     const separator = isTSV ? '\t' : ',';
-    
+
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
 
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
-      
+
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === separator && !inQuotes) {
@@ -97,15 +99,28 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
         current += char;
       }
     }
-    
+
     result.push(current.trim());
     return result;
   };
 
   const validateHeaders = (headers: string[]): string | null => {
-    const missingHeaders = requiredHeaders.filter(
-      header => !headers.some(h => h.toLowerCase() === header.toLowerCase())
-    );
+    // Mapeamento de cabeçalhos alternativos
+    const headerAlternatives: Record<string, string[]> = {
+      'Atualizacao Correios': ['Ultima Atualizacao']
+    };
+
+    const missingHeaders = requiredHeaders.filter(header => {
+      // Verifica se o cabeçalho principal existe
+      const headerExists = headers.some(h => h.toLowerCase() === header.toLowerCase());
+      if (headerExists) return false;
+
+      // Se não existir, verifica se alguma alternativa existe
+      const alternatives = headerAlternatives[header] || [];
+      return !alternatives.some(alt =>
+        headers.some(h => h.toLowerCase() === alt.toLowerCase())
+      );
+    });
 
     if (missingHeaders.length > 0) {
       return `Cabeçalhos obrigatórios ausentes:\n${missingHeaders.join('\n')}`;
@@ -122,7 +137,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
     setIsLoading(true);
 
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
@@ -146,13 +161,18 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
 
         const orders: Order[] = [];
         let skippedLines = 0;
-        let problematicLines: number[] = [];
+        let problematicLines: {lineNumber: number, reason: string}[] = [];
 
         for (let i = 1; i < lines.length; i++) {
           const values = parseLine(lines[i]);
-          
+
           // If the line is empty or has fewer columns than headers, pad it with empty strings
           if (values.length < headers.length) {
+            // Registrar linhas com menos colunas que o esperado
+            const reason = `Linha com menos colunas que o esperado (${values.length}/${headers.length})`;
+            problematicLines.push({lineNumber: i + 1, reason});
+
+            // Mas ainda processamos a linha, preenchendo com valores vazios
             const paddedValues = [...values];
             while (paddedValues.length < headers.length) {
               paddedValues.push('');
@@ -160,17 +180,19 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
             values.splice(0, values.length, ...paddedValues);
           }
 
-          // Validate required fields
-          const requiredFields = ['Data Venda', 'ID Venda', 'Cliente', 'Valor Venda'];
-          const missingFields = requiredFields.filter(field => {
+          // Não validamos mais campos obrigatórios - todos os campos são opcionais
+          // Apenas registramos para fins de depuração
+          const recommendedFields = ['Data Venda', 'ID Venda', 'Cliente', 'Valor Venda'];
+          const missingFields = recommendedFields.filter(field => {
             const index = headers.indexOf(field);
             return index === -1 || !values[index]?.trim();
           });
 
           if (missingFields.length > 0) {
-            problematicLines.push(i + 1);
-            skippedLines++;
-            continue;
+            const reason = `Campos recomendados ausentes: ${missingFields.join(', ')}`;
+            console.log(`Linha ${i + 1}: ${reason}`);
+            // Registramos, mas não ignoramos mais linhas com campos ausentes
+            // problematicLines.push({lineNumber: i + 1, reason});
           }
 
           // Create order object with proper mapping
@@ -188,6 +210,8 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
             ultimaAtualizacao: values[headers.indexOf('Ultima Atualização')] || '',
             codigoRastreio: values[headers.indexOf('Código de Rastreio')] || '',
             statusCorreios: values[headers.indexOf('Status Correios')] || '',
+            // Aceita tanto 'Atualizacao Correios' quanto 'Ultima Atualizacao' para o campo atualizacaoCorreios
+            atualizacaoCorreios: values[headers.indexOf('Atualizacao Correios')] || values[headers.indexOf('Ultima Atualizacao')] || '',
             vendedor: values[headers.indexOf('Vendedor')] || '',
             operador: values[headers.indexOf('Operador')] || '',
             zap: values[headers.indexOf('Zap')] || '',
@@ -220,20 +244,21 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
           throw new Error('Nenhum pedido válido encontrado no arquivo');
         }
 
+        // Registrar informações sobre linhas problemáticas, mas não bloquear a importação
         if (problematicLines.length > 0) {
+          console.warn(`Foram encontradas ${problematicLines.length} linhas com formato inválido:`, problematicLines);
+
+          // Apenas mostrar um aviso, não um erro bloqueante
           setError(
-            `Foram encontrados ${skippedLines} linhas com problemas:\n\n` +
-            `Linhas com campos obrigatórios ausentes:\n` +
-            problematicLines.map(line => `Linha ${line}`).join('\n') + '\n\n' +
-            `Campos obrigatórios:\n` +
+            `Aviso: Foram encontradas ${problematicLines.length} linhas com formato inválido.\n\n` +
+            `Estas linhas podem ter menos colunas que o esperado ou estar em formato incorreto.\n` +
+            `Todas as linhas válidas foram importadas normalmente.\n\n` +
+            `Campos recomendados (mas não obrigatórios):\n` +
+            `- Data Venda\n` +
             `- ID Venda\n` +
             `- Cliente\n` +
             `- Valor Venda\n\n` +
-            `Verifique se:\n` +
-            `1. Todos os campos obrigatórios estão preenchidos\n` +
-            `2. Não há linhas em branco no meio do arquivo\n` +
-            `3. Os separadores (tabs) estão corretos\n` +
-            `4. Não há caracteres especiais ou quebras de linha dentro dos campos`
+            `Dica: Verifique se o arquivo CSV está formatado corretamente.`
           );
         }
 
@@ -269,7 +294,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
         // Os dados já estão no formato Order, então podemos passá-los diretamente
         // sem a conversão complexa que estava causando o problema
         onImportSuccess(previewData.orders);
-        
+
         // Limpar o estado após importação bem-sucedida
         setShowPreview(false);
         setPreviewData(null);
@@ -306,7 +331,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
       >
         {isLoading ? 'Processando...' : 'Selecionar Arquivo'}
       </Button>
-      
+
       {isLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
           <CircularProgress size={24} />
@@ -334,9 +359,16 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
             <Typography variant="subtitle1" gutterBottom>
               Número de Pedidos: {previewData?.orders.length}
             </Typography>
-            {previewData && previewData.skippedLines > 0 && (
+            {previewData && previewData.problematicLines.length > 0 && (
               <Alert severity="warning" sx={{ mb: 2 }}>
-                {previewData.skippedLines} linhas foram ignoradas devido a campos obrigatórios ausentes
+                <Typography variant="subtitle2" gutterBottom>
+                  {previewData.problematicLines.length} linhas com formato inválido foram detectadas
+                </Typography>
+                <Box sx={{ maxHeight: '100px', overflow: 'auto', fontSize: '0.8rem' }}>
+                  {previewData.problematicLines.map((line, index) => (
+                    <div key={index}>Linha {line.lineNumber}: {line.reason}</div>
+                  ))}
+                </Box>
               </Alert>
             )}
             <TableContainer component={Paper} sx={{ mt: 2, maxHeight: 400 }}>
@@ -381,6 +413,10 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
                               return order.codigoRastreio;
                             case 'Status Correios':
                               return order.statusCorreios;
+                            case 'Atualizacao Correios':
+                              return order.atualizacaoCorreios;
+                            case 'Ultima Atualizacao':
+                              return order.atualizacaoCorreios;
                             case 'Vendedor':
                               return order.vendedor;
                             case 'Operador':
@@ -452,7 +488,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowPreview(false)}>Cancelar</Button>
-          <Button 
+          <Button
             onClick={handleConfirmImport}
             variant="contained"
             color="primary"
@@ -465,4 +501,4 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImportSuccess }) => {
   );
 };
 
-export default CSVImport; 
+export default CSVImport;

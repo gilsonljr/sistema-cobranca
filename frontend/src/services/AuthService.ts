@@ -1,5 +1,6 @@
 import api from './api';
 import { User } from '../types/User';
+import UserPasswordService from './UserPasswordService';
 
 export interface LoginCredentials {
   email: string;
@@ -31,91 +32,48 @@ class AuthService {
 
       if (mockMode) {
         console.log('Mock mode is enabled, checking credentials...');
-        console.log('Comparing:',
-          `'${credentials.email}' === 'admin@sistema.com'`, credentials.email === 'admin@sistema.com',
-          `'${credentials.password}' === 'admin123'`, credentials.password === 'admin123');
-
-        // Check if credentials match admin
-        if (credentials.email === 'admin@sistema.com' && credentials.password === 'admin123') {
-          console.log('Admin credentials matched!');
-          // Store mock admin info
-          localStorage.setItem('userInfo', JSON.stringify({
-            id: 1,
-            email: 'admin@sistema.com',
-            fullName: 'Admin',
-            role: 'admin'
-          }));
-
-          // Store mock tokens
-          const tokens = {
-            access_token: 'mock-admin-token',
-            refresh_token: 'mock-admin-refresh-token',
-            token_type: 'bearer'
-          };
-
-          localStorage.setItem('authTokens', JSON.stringify(tokens));
-          return tokens;
+        
+        // Use UserPasswordService to verify credentials
+        const isValid = UserPasswordService.verifyPassword(credentials.email, credentials.password);
+        
+        if (!isValid) {
+          console.log('Invalid credentials, password verification failed');
+          throw new Error('Invalid credentials - Password verification failed');
         }
-
-        // Check if credentials match supervisor
-        if (credentials.email === 'supervisor@sistema.com' && credentials.password === 'supervisor123') {
-          localStorage.setItem('userInfo', JSON.stringify({
-            id: 2,
-            email: 'supervisor@sistema.com',
-            fullName: 'Supervisor',
-            role: 'supervisor'
-          }));
-
-          const tokens = {
-            access_token: 'mock-supervisor-token',
-            refresh_token: 'mock-supervisor-refresh-token',
-            token_type: 'bearer'
-          };
-
-          localStorage.setItem('authTokens', JSON.stringify(tokens));
-          return tokens;
+        
+        // Get default_users to retrieve role and other user information
+        const defaultUsersStr = localStorage.getItem('default_users');
+        const defaultUsers = defaultUsersStr ? JSON.parse(defaultUsersStr) : {};
+        const user = defaultUsers[credentials.email.toLowerCase()];
+        
+        if (!user) {
+          console.log('User not found in default_users');
+          throw new Error('Invalid credentials - User not found');
         }
-
-        // Check if credentials match operator
-        if (credentials.email === 'operador@sistema.com' && credentials.password === 'operador123') {
-          localStorage.setItem('userInfo', JSON.stringify({
-            id: 3,
-            email: 'operador@sistema.com',
-            fullName: 'Operador',
-            role: 'collector'
-          }));
-
-          const tokens = {
-            access_token: 'mock-operator-token',
-            refresh_token: 'mock-operator-refresh-token',
-            token_type: 'bearer'
-          };
-
-          localStorage.setItem('authTokens', JSON.stringify(tokens));
-          return tokens;
-        }
-
-        // Check if credentials match seller
-        if (credentials.email === 'vendedor@sistema.com' && credentials.password === 'vendedor123') {
-          localStorage.setItem('userInfo', JSON.stringify({
-            id: 4,
-            email: 'vendedor@sistema.com',
-            fullName: 'Vendedor',
-            role: 'seller'
-          }));
-
-          const tokens = {
-            access_token: 'mock-seller-token',
-            refresh_token: 'mock-seller-refresh-token',
-            token_type: 'bearer'
-          };
-
-          localStorage.setItem('authTokens', JSON.stringify(tokens));
-          return tokens;
-        }
-
-        console.log('No credential match found, throwing error...');
-        throw new Error('Invalid credentials - No matching user found in mock mode');
+        
+        console.log('Valid credentials for user:', user);
+        
+        // Store user info
+        localStorage.setItem('userInfo', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role
+        }));
+        
+        // Generate tokens based on user role
+        const tokenPrefix = user.role === 'admin' ? 'admin' : 
+                            user.role === 'supervisor' ? 'supervisor' : 
+                            user.role === 'collector' ? 'collector' : 'seller';
+        
+        const tokens = {
+          access_token: `mock-${tokenPrefix}-token-${Date.now()}`,
+          refresh_token: `mock-${tokenPrefix}-refresh-token-${Date.now()}`,
+          token_type: 'bearer'
+        };
+        
+        localStorage.setItem('authTokens', JSON.stringify(tokens));
+        return tokens;
       }
 
       // For production with real API
@@ -244,7 +202,9 @@ class AuthService {
    */
   isAuthenticated(): boolean {
     const authTokens = this.getAuthTokens();
-    return !!authTokens && !!authTokens.access_token;
+    const isAuth = !!authTokens && !!authTokens.access_token;
+    console.log('isAuthenticated check:', { authTokens, isAuth });
+    return isAuth;
   }
 
   /**

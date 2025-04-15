@@ -54,33 +54,37 @@ interface Props {
 }
 
 const ReportsPage: React.FC<Props> = ({ orders }) => {
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [reportType, setReportType] = useState('sellers');
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [filteredOrdersList, setFilteredOrdersList] = useState<Order[]>(orders);
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: string) => {
-    setReportType(newValue);
-  };
-
-  // Função para converter string de data BR (DD/MM/YYYY) para objeto Date
+  const [activeTab, setActiveTab] = React.useState(0);
+  const [selectedPeriod, setSelectedPeriod] = React.useState<string>('month');
+  const [startDate, setStartDate] = React.useState<Date | null>(null);
+  const [endDate, setEndDate] = React.useState<Date | null>(null);
+  const [filteredOrdersList, setFilteredOrdersList] = React.useState<Order[]>([]);
+  
+  // Filter out deleted orders first
+  const nonDeletedOrders = React.useMemo(() => 
+    orders.filter(order => !order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado'), 
+    [orders]
+  );
+  
+  // Parse date from DD/MM/YYYY format
   const parseDate = (dateStr: string): Date | null => {
-    if (!dateStr) return null;
-    
-    const parts = dateStr.split('/');
-    if (parts.length !== 3) return null;
-    
-    const [day, month, year] = parts.map(Number);
-    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-    
-    // Mês em JavaScript é 0-indexed (0-11)
-    return new Date(year, month - 1, day);
+    try {
+      const parts = dateStr.split('/');
+      if (parts.length !== 3) return null;
+      
+      const [day, month, year] = parts.map(Number);
+      if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+      
+      return new Date(year, month - 1, day);
+    } catch (e) {
+      console.error("Error parsing date:", dateStr, e);
+      return null;
+    }
   };
 
   // Aplicar filtros de período
   const applyPeriodFilter = () => {
-    let filtered = [...orders];
+    let filtered = [...nonDeletedOrders];
     
     if (selectedPeriod === 'custom') {
       // Filtro personalizado usando as datas selecionadas
@@ -129,12 +133,12 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
     if (selectedPeriod !== 'custom') {
       applyPeriodFilter();
     }
-  }, [selectedPeriod, orders]);
+  }, [selectedPeriod, nonDeletedOrders]);
   
   // Efeito inicial
   React.useEffect(() => {
-    setFilteredOrdersList(orders);
-  }, [orders]);
+    setFilteredOrdersList(nonDeletedOrders);
+  }, [nonDeletedOrders]);
 
   const calculateSellerPerformance = (filteredOrders: Order[]): PerformanceData[] => {
     const performanceMap = new Map<string, PerformanceData>();
@@ -221,12 +225,12 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
       <Paper sx={{ mb: 3 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs
-            value={reportType}
-            onChange={handleTabChange}
+            value={activeTab}
+            onChange={(event, newValue) => setActiveTab(newValue)}
             variant="fullWidth"
           >
-            <Tab label="Desempenho de Vendedores" value="sellers" />
-            <Tab label="Desempenho de Operadores" value="operators" />
+            <Tab label="Desempenho de Vendedores" value={0} />
+            <Tab label="Desempenho de Operadores" value={1} />
           </Tabs>
         </Box>
 
@@ -287,7 +291,7 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
             )}
           </Grid>
 
-          {reportType === 'sellers' ? (
+          {activeTab === 0 ? (
             <TableContainer>
               <Table>
                 <TableHead>
@@ -390,10 +394,10 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                {reportType === 'sellers' ? 'Melhores Vendedores' : 'Melhores Operadores'}
+                {activeTab === 0 ? 'Melhores Vendedores' : 'Melhores Operadores'}
               </Typography>
               <Box sx={{ mt: 2 }}>
-                {(reportType === 'sellers' ? sellerPerformance : operatorPerformance)
+                {(activeTab === 0 ? sellerPerformance : operatorPerformance)
                   .slice(0, 3)
                   .map((person, index) => (
                     <Box key={person.name} sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
@@ -420,10 +424,10 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
               <Grid container spacing={2} sx={{ mt: 1 }}>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Total de {reportType === 'sellers' ? 'Vendas' : 'Cobranças'}
+                    Total de {activeTab === 0 ? 'Vendas' : 'Cobranças'}
                   </Typography>
                   <Typography variant="h6">
-                    {(reportType === 'sellers' ? sellerPerformance : operatorPerformance)
+                    {(activeTab === 0 ? sellerPerformance : operatorPerformance)
                       .reduce((sum, p) => sum + p.totalOrders, 0)}
                   </Typography>
                 </Grid>
@@ -432,19 +436,19 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
                     Valor Total
                   </Typography>
                   <Typography variant="h6">
-                    R$ {(reportType === 'sellers' ? sellerPerformance : operatorPerformance)
+                    R$ {(activeTab === 0 ? sellerPerformance : operatorPerformance)
                       .reduce((sum, p) => sum + p.totalValue, 0)
                       .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Taxa Média de {reportType === 'sellers' ? 'Conversão' : 'Sucesso'}
+                    Taxa Média de {activeTab === 0 ? 'Conversão' : 'Sucesso'}
                   </Typography>
                   <Typography variant="h6">
-                    {((reportType === 'sellers' ? sellerPerformance : operatorPerformance)
-                      .reduce((sum, p) => sum + (reportType === 'sellers' ? p.conversionRate : p.successRate), 0) /
-                      (reportType === 'sellers' ? sellerPerformance : operatorPerformance).length)
+                    {((activeTab === 0 ? sellerPerformance : operatorPerformance)
+                      .reduce((sum, p) => sum + (activeTab === 0 ? p.conversionRate : p.successRate), 0) /
+                      (activeTab === 0 ? sellerPerformance : operatorPerformance).length)
                       .toFixed(1)}%
                   </Typography>
                 </Grid>
@@ -453,9 +457,9 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
                     Valor Médio
                   </Typography>
                   <Typography variant="h6">
-                    R$ {((reportType === 'sellers' ? sellerPerformance : operatorPerformance)
+                    R$ {((activeTab === 0 ? sellerPerformance : operatorPerformance)
                       .reduce((sum, p) => sum + p.averageValue, 0) /
-                      (reportType === 'sellers' ? sellerPerformance : operatorPerformance).length)
+                      (activeTab === 0 ? sellerPerformance : operatorPerformance).length)
                       .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </Typography>
                 </Grid>

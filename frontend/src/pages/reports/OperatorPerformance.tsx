@@ -1,0 +1,614 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Grid, Paper, Typography, Box,
+  Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Avatar, Chip,
+  LinearProgress, Rating, Card, CardContent,
+  FormControl, InputLabel, Select, MenuItem,
+  SelectChangeEvent, Divider
+} from '@mui/material';
+import {
+  BarChart, Bar, RadarChart, Radar, PolarGrid,
+  PolarAngleAxis, PolarRadiusAxis,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line
+} from 'recharts';
+import { Order } from '../../types/Order';
+
+// Simulação de operadores
+const mockOperators = [
+  { id: 1, name: 'João Silva', email: 'joao.silva@exemplo.com', role: 'Operador Sênior', avatar: 'JS' },
+  { id: 2, name: 'Maria Oliveira', email: 'maria.oliveira@exemplo.com', role: 'Operador Pleno', avatar: 'MO' },
+  { id: 3, name: 'Pedro Santos', email: 'pedro.santos@exemplo.com', role: 'Operador Júnior', avatar: 'PS' },
+  { id: 4, name: 'Ana Souza', email: 'ana.souza@exemplo.com', role: 'Operador Sênior', avatar: 'AS' },
+  { id: 5, name: 'Carlos Ferreira', email: 'carlos.ferreira@exemplo.com', role: 'Operador Pleno', avatar: 'CF' },
+];
+
+interface OperatorPerformanceProps {
+  orders: Order[];
+  startDate?: Date;
+  endDate?: Date;
+}
+
+const OperatorPerformance: React.FC<OperatorPerformanceProps> = ({
+  orders, startDate, endDate
+}) => {
+  const [selectedOperator, setSelectedOperator] = useState<string | 'all'>('all');
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const [comparisonData, setComparisonData] = useState<any[]>([]);
+  const [timeSeriesData, setTimeSeriesData] = useState<any[]>([]);
+  const [radarData, setRadarData] = useState<any[]>([]);
+  const [operators] = useState(mockOperators);
+
+  // Filter out deleted orders
+  const filteredOrders = React.useMemo(() => 
+    orders.filter(order => !order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado'), 
+    [orders]
+  );
+
+  useEffect(() => {
+    // Use filteredOrders instead of orders
+    // Calculate operator performance metrics
+    calculateOperatorPerformance();
+    
+    // Call the existing functions for preparing different types of data
+    prepareComparisonData();
+    prepareTimeSeriesData();
+    prepareRadarData();
+  }, [filteredOrders, startDate, endDate]);
+
+  const calculateOperatorPerformance = () => {
+    // Filtrar pedidos pelo período selecionado
+    let dateFilteredOrders = filteredOrders;
+
+    if (startDate || endDate) {
+      const startDateTime = startDate ? new Date(startDate) : new Date(0);
+      const endDateTime = endDate ? new Date(endDate) : new Date();
+
+      dateFilteredOrders = filteredOrders.filter(order => {
+        if (!order.dataVenda) return false;
+
+        try {
+          // Verificar o formato da data (DD/MM/YYYY ou YYYY-MM-DD)
+          let orderDate;
+          if (order.dataVenda.includes('/')) {
+            // Formato brasileiro DD/MM/YYYY
+            const parts = order.dataVenda.split('/');
+            if (parts.length === 3) {
+              // Converter para YYYY-MM-DD para criar o objeto Date
+              orderDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00`);
+            } else {
+              return false;
+            }
+          } else {
+            // Assumir formato ISO YYYY-MM-DD
+            orderDate = new Date(order.dataVenda);
+          }
+
+          if (isNaN(orderDate.getTime())) {
+            console.warn('Data inválida após conversão:', order.dataVenda);
+            return false;
+          }
+
+          return orderDate >= startDateTime && orderDate <= endDateTime;
+        } catch (error) {
+          console.warn('Data inválida encontrada:', order.dataVenda);
+          return false;
+        }
+      });
+    }
+
+    // Calcular métricas para cada operador
+    const metrics = operators.map(operator => {
+      // Filtrar pedidos por operador (simulado)
+      const operatorOrders = dateFilteredOrders.filter((_, index) => index % operators.length === operator.id - 1);
+
+      // Calcular métricas
+      const totalOrders = operatorOrders.length;
+      const totalValue = operatorOrders.reduce((sum, order) => sum + order.valorVenda, 0);
+      const receivedValue = operatorOrders.reduce((sum, order) => sum + order.valorRecebido, 0);
+      const conversionRate = totalValue > 0 ? (receivedValue / totalValue) * 100 : 0;
+      const averageValue = totalOrders > 0 ? totalValue / totalOrders : 0;
+
+      // Calcular tempo médio de cobrança (simulado)
+      const avgCollectionTime = Math.floor(Math.random() * 10) + 1; // 1-10 dias
+
+      // Calcular taxa de sucesso (simulado)
+      const successfulOrders = operatorOrders.filter(order =>
+        order.situacaoVenda?.toLowerCase() === 'completo' ||
+        order.valorRecebido >= order.valorVenda
+      ).length;
+      const successRate = totalOrders > 0 ? (successfulOrders / totalOrders) * 100 : 0;
+
+      // Determinar eficiência com base nas métricas
+      let efficiency = 'Média';
+      if (conversionRate > 80 && avgCollectionTime < 5) {
+        efficiency = 'Alta';
+      } else if (conversionRate < 50 || avgCollectionTime > 8) {
+        efficiency = 'Baixa';
+      }
+
+      // Calcular performance geral (1-5)
+      const performance = (
+        (conversionRate / 100) * 2.5 +
+        (successRate / 100) * 1.5 +
+        (1 - (avgCollectionTime / 10)) * 1
+      );
+
+      return {
+        id: operator.id,
+        name: operator.name,
+        avatar: operator.avatar,
+        role: operator.role,
+        email: operator.email,
+        totalOrders,
+        totalValue,
+        receivedValue,
+        conversionRate: Math.round(conversionRate),
+        averageValue,
+        successRate: Math.round(successRate),
+        avgCollectionTime,
+        efficiency,
+        performance: Math.min(5, Math.max(1, performance))
+      };
+    });
+
+    setPerformanceData(metrics);
+  };
+
+  const prepareComparisonData = () => {
+    // Preparar dados para comparação entre operadores
+    const comparisonMetrics = performanceData.map(op => ({
+      name: op.name,
+      taxaConversao: op.conversionRate,
+      tempoMedio: op.avgCollectionTime,
+      taxaSucesso: op.successRate
+    }));
+
+    setComparisonData(comparisonMetrics);
+  };
+
+  const prepareTimeSeriesData = () => {
+    // Preparar dados de série temporal para o operador selecionado
+    const now = new Date();
+    const data = [];
+
+    // Gerar dados para os últimos 30 dias
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (30 - i - 1));
+
+      // Para cada operador, gerar dados simulados
+      const operatorData: Record<string, any> = {
+        date: date.toLocaleDateString('pt-BR')
+      };
+
+      operators.forEach(op => {
+        // Simulação de taxa de conversão diária com alguma variação
+        const baseRate = performanceData.find(p => p.id === op.id)?.conversionRate || 70;
+        const variation = Math.sin(i * 0.2) * 15; // Variação senoidal para simular tendências
+        const dailyRate = Math.max(0, Math.min(100, baseRate + variation));
+
+        operatorData[`op${op.id}`] = Math.round(dailyRate);
+      });
+
+      data.push(operatorData);
+    }
+
+    setTimeSeriesData(data);
+  };
+
+  const prepareRadarData = () => {
+    // Preparar dados para o gráfico radar
+    if (selectedOperator === 'all') {
+      // Dados para todos os operadores
+      const data = [
+        { subject: 'Taxa de Conversão', fullMark: 100 },
+        { subject: 'Taxa de Sucesso', fullMark: 100 },
+        { subject: 'Eficiência de Tempo', fullMark: 100 },
+        { subject: 'Volume de Pedidos', fullMark: 100 },
+        { subject: 'Valor Médio', fullMark: 100 },
+      ];
+
+      // Adicionar dados de cada operador
+      performanceData.forEach(op => {
+        // Usar tipagem segura com indexação
+        (data[0] as any)[op.name] = op.conversionRate;
+        (data[1] as any)[op.name] = op.successRate;
+        (data[2] as any)[op.name] = Math.max(0, 100 - (op.avgCollectionTime * 10));
+
+        // Normalizar volume de pedidos (0-100)
+        const maxOrders = Math.max(...performanceData.map(p => p.totalOrders));
+        (data[3] as any)[op.name] = maxOrders > 0 ? (op.totalOrders / maxOrders) * 100 : 0;
+
+        // Normalizar valor médio (0-100)
+        const maxAvgValue = Math.max(...performanceData.map(p => p.averageValue));
+        (data[4] as any)[op.name] = maxAvgValue > 0 ? (op.averageValue / maxAvgValue) * 100 : 0;
+      });
+
+      setRadarData(data);
+    } else {
+      // Dados para um operador específico
+      const operatorData = performanceData.find(op => op.id === Number(selectedOperator));
+
+      if (operatorData) {
+        const data = [
+          { subject: 'Taxa de Conversão', value: operatorData.conversionRate, fullMark: 100 },
+          { subject: 'Taxa de Sucesso', value: operatorData.successRate, fullMark: 100 },
+          { subject: 'Eficiência de Tempo', value: Math.max(0, 100 - (operatorData.avgCollectionTime * 10)), fullMark: 100 },
+          { subject: 'Volume de Pedidos', value: Math.min(100, operatorData.totalOrders * 5), fullMark: 100 },
+          { subject: 'Valor Médio', value: Math.min(100, (operatorData.averageValue / 1000) * 10), fullMark: 100 },
+        ];
+
+        setRadarData(data);
+      }
+    }
+  };
+
+  const handleOperatorChange = (event: SelectChangeEvent) => {
+    setSelectedOperator(event.target.value);
+  };
+
+  // Obter dados do operador selecionado
+  const selectedOperatorData = selectedOperator !== 'all'
+    ? performanceData.find(op => op.id === Number(selectedOperator))
+    : null;
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f9fafc' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 500, color: '#334155' }}>
+          Performance de Operadores
+        </Typography>
+
+        <FormControl size="small" sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}>
+          <InputLabel>Operador</InputLabel>
+          <Select
+            value={selectedOperator}
+            label="Operador"
+            onChange={handleOperatorChange}
+          >
+            <MenuItem value="all">Todos os Operadores</MenuItem>
+            {operators.map(op => (
+              <MenuItem key={op.id} value={op.id.toString()}>{op.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+
+      {selectedOperator === 'all' ? (
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+              <Typography variant="h6" sx={{ fontWeight: 500, color: '#334155', mb: 2 }}>
+                Comparação de Performance
+              </Typography>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={comparisonData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `${value}%`} />
+                  <Legend />
+                  <Bar dataKey="taxaConversao" name="Taxa de Conversão (%)" fill="#8884d8" />
+                  <Bar dataKey="taxaSucesso" name="Taxa de Sucesso (%)" fill="#82ca9d" />
+                  <Bar dataKey="tempoMedio" name="Tempo Médio (dias)" fill="#ffc658" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 3, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+              <Typography variant="h6" sx={{ fontWeight: 500, color: '#334155', mb: 2 }}>
+                Análise Comparativa
+              </Typography>
+              <ResponsiveContainer width="100%" height={400}>
+                <RadarChart outerRadius={150} data={radarData}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="subject" />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                  {performanceData.map((op, index) => (
+                    <Radar
+                      key={op.id}
+                      name={op.name}
+                      dataKey={op.name}
+                      stroke={`hsl(${index * 45}, 70%, 50%)`}
+                      fill={`hsl(${index * 45}, 70%, 50%)`}
+                      fillOpacity={0.3}
+                    />
+                  ))}
+                  <Legend />
+                  <Tooltip />
+                </RadarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 3, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+              <Typography variant="h6" sx={{ fontWeight: 500, color: '#334155', mb: 2 }}>
+                Evolução da Taxa de Conversão
+              </Typography>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={timeSeriesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip formatter={(value: any) => `${value}%`} />
+                  <Legend />
+                  {operators.map((op, index) => (
+                    <Line
+                      key={op.id}
+                      type="monotone"
+                      dataKey={`op${op.id}`}
+                      name={op.name}
+                      stroke={`hsl(${index * 45}, 70%, 50%)`}
+                      activeDot={{ r: 8 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12}>
+            <TableContainer component={Paper} sx={{ borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Operador</TableCell>
+                    <TableCell>Pedidos</TableCell>
+                    <TableCell>Valor Total</TableCell>
+                    <TableCell>Valor Recebido</TableCell>
+                    <TableCell>Taxa de Conversão</TableCell>
+                    <TableCell>Tempo Médio</TableCell>
+                    <TableCell>Eficiência</TableCell>
+                    <TableCell>Performance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {performanceData.map((op) => (
+                    <TableRow key={op.id}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Avatar sx={{ mr: 2 }}>{op.avatar}</Avatar>
+                          <Box>
+                            <Typography variant="body2" fontWeight={500}>
+                              {op.name}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {op.role}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell>{op.totalOrders}</TableCell>
+                      <TableCell>R$ {op.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell>R$ {op.receivedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Box sx={{ width: '100%', mr: 1 }}>
+                            <LinearProgress
+                              variant="determinate"
+                              value={op.conversionRate}
+                              color={op.conversionRate > 70 ? "success" : op.conversionRate > 40 ? "warning" : "error"}
+                              sx={{ height: 8, borderRadius: 4 }}
+                            />
+                          </Box>
+                          <Box sx={{ minWidth: 35 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              {op.conversionRate}%
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell>{op.avgCollectionTime} dias</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={op.efficiency}
+                          color={op.efficiency === 'Alta' ? "success" : op.efficiency === 'Média' ? "warning" : "error"}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Rating value={op.performance} readOnly precision={0.5} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Grid>
+        </Grid>
+      ) : (
+        <Grid container spacing={3}>
+          {/* Detalhes do operador selecionado */}
+          {selectedOperatorData && (
+            <>
+              <Grid item xs={12} md={4}>
+                <Card sx={{ borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Avatar sx={{ width: 56, height: 56, mr: 2, bgcolor: 'primary.main' }}>
+                        {selectedOperatorData.avatar}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="h6">
+                          {selectedOperatorData.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {selectedOperatorData.role}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Performance Geral
+                      </Typography>
+                      <Rating value={selectedOperatorData.performance} readOnly precision={0.5} size="large" />
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Eficiência
+                      </Typography>
+                      <Chip
+                        label={selectedOperatorData.efficiency}
+                        color={selectedOperatorData.efficiency === 'Alta' ? "success" : selectedOperatorData.efficiency === 'Média' ? "warning" : "error"}
+                      />
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Email
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedOperatorData.email}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={8}>
+                <Paper sx={{ p: 3, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 500, color: '#334155', mb: 2 }}>
+                    Métricas de Performance
+                  </Typography>
+
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <Typography variant="h4" color="primary.main" fontWeight={700}>
+                          {selectedOperatorData.totalOrders}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Total de Pedidos
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <Typography variant="h4" color="primary.main" fontWeight={700}>
+                          {selectedOperatorData.conversionRate}%
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Taxa de Conversão
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <Typography variant="h4" color="primary.main" fontWeight={700}>
+                          {selectedOperatorData.successRate}%
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Taxa de Sucesso
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <Typography variant="h4" color="primary.main" fontWeight={700}>
+                          {selectedOperatorData.avgCollectionTime}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Tempo Médio (dias)
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  </Grid>
+
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Valores
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <Paper sx={{ p: 2, bgcolor: 'background.default', borderRadius: '10px' }}>
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Valor Total
+                          </Typography>
+                          <Typography variant="h5" color="text.primary">
+                            R$ {selectedOperatorData.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+
+                      <Grid item xs={12} sm={6}>
+                        <Paper sx={{ p: 2, bgcolor: 'background.default', borderRadius: '10px' }}>
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Valor Recebido
+                          </Typography>
+                          <Typography variant="h5" color="success.main">
+                            R$ {selectedOperatorData.receivedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 3, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 500, color: '#334155', mb: 2 }}>
+                    Análise de Competências
+                  </Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart outerRadius={120} data={radarData}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="subject" />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                      <Radar
+                        name={selectedOperatorData.name}
+                        dataKey="value"
+                        stroke="#8884d8"
+                        fill="#8884d8"
+                        fillOpacity={0.6}
+                      />
+                      <Tooltip formatter={(value: any) => `${Number(value).toFixed(0)}%`} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 3, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 500, color: '#334155', mb: 2 }}>
+                    Evolução da Taxa de Conversão
+                  </Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={timeSeriesData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip formatter={(value: any) => `${value}%`} />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey={`op${selectedOperatorData.id}`}
+                        name={selectedOperatorData.name}
+                        stroke="#8884d8"
+                        activeDot={{ r: 8 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Paper>
+              </Grid>
+            </>
+          )}
+        </Grid>
+      )}
+    </Box>
+  );
+};
+
+export default OperatorPerformance;

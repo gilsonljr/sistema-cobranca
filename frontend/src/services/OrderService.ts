@@ -81,6 +81,7 @@ class OrderService {
       ultimaAtualizacao: formatDateString(backendOrder.updated_at || backendOrder.created_at),
       codigoRastreio: backendOrder.tracking_code || '',
       statusCorreios: '', // This will be populated by CorreiosService
+      atualizacaoCorreios: '',
       vendedor: backendOrder.seller_name || '',
       operador: backendOrder.collector_name || '',
       zap: backendOrder.customer_phone,
@@ -197,8 +198,20 @@ class OrderService {
       const mockMode = process.env.REACT_APP_MOCK_API === 'true';
 
       if (mockMode) {
-        const savedOrders = localStorage.getItem('orders');
-        return savedOrders ? JSON.parse(savedOrders) : [];
+        // Mock data from localStorage
+        const ordersData = localStorage.getItem('orders');
+        let orders: Order[] = ordersData ? JSON.parse(ordersData) : [];
+
+        return orders.map(order => {
+          // Ensure all orders have valid numeric fields
+          return {
+            ...order,
+            valorVenda: order.valorVenda !== undefined ? order.valorVenda : 0,
+            valorRecebido: order.valorRecebido !== undefined ? order.valorRecebido : 0,
+            // Ensure situation is a string
+            situacaoVenda: order.situacaoVenda || 'Pendente'
+          };
+        });
       }
 
       // For production with real API
@@ -206,7 +219,7 @@ class OrderService {
       return response.data.map(order => this.convertToFrontendOrder(order));
     } catch (error) {
       console.error('Error fetching orders:', error);
-      throw error;
+      return [];
     }
   }
 
