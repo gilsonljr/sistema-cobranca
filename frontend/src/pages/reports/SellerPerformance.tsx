@@ -73,7 +73,7 @@ const SellerPerformance: React.FC<SellerPerformanceProps> = ({
     console.log('Amostra de vendedores:', nonDeletedOrders.slice(0, 5).map(order => order.vendedor));
 
     const uniqueSellers = Array.from(new Set(nonDeletedOrders.map(order => order.vendedor)))
-      .filter(seller => seller && seller.trim() !== '')
+      .filter(seller => seller && typeof seller === 'string' && seller.trim() !== '')
       .map((seller, index) => ({
         id: index + 1,
         name: seller,
@@ -146,17 +146,17 @@ const SellerPerformance: React.FC<SellerPerformanceProps> = ({
     const metrics = sellers.map(seller => {
       // Filtrar pedidos por vendedor
       const sellerOrders = periodFilteredOrders.filter(order => {
-        if (!order.vendedor || !seller) return false;
+        if (!order.vendedor || !seller || !seller.name) return false;
 
         // Normalizar strings para comparação
-        const orderVendedor = order.vendedor.trim().toLowerCase();
-        const sellerName = seller.trim().toLowerCase();
+        const orderVendedor = typeof order.vendedor === 'string' ? order.vendedor.trim().toLowerCase() : '';
+        const sellerName = typeof seller.name === 'string' ? seller.name.trim().toLowerCase() : '';
 
         console.log(`Comparando: '${orderVendedor}' com '${sellerName}'`);
         return orderVendedor === sellerName;
       });
 
-      console.log(`Pedidos encontrados para ${seller}: ${sellerOrders.length}`);
+      console.log(`Pedidos encontrados para ${seller.name}: ${sellerOrders.length}`);
 
       // Calcular métricas
       const totalOrders = sellerOrders.length;
@@ -440,7 +440,7 @@ const SellerPerformance: React.FC<SellerPerformanceProps> = ({
                       <TableRow key={seller.name}>
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Avatar sx={{ bgcolor: `hsl(${sellers.indexOf(seller.name) * 45}, 70%, 50%)`, mr: 1 }}>
+                            <Avatar sx={{ bgcolor: `hsl(${sellers.findIndex(s => s.name === seller.name) * 45}, 70%, 50%)`, mr: 1 }}>
                               {seller.avatar}
                             </Avatar>
                             <Box>

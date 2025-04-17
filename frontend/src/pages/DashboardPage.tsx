@@ -172,6 +172,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const [operadores, setOperadores] = useState<string[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   
+  // Estado para controlar a ordenação
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [orderBy, setOrderBy] = useState<string>('dataVenda');
+  
   // Obter informações de autenticação diretamente do AuthService
   const isAdmin = AuthService.isAdmin();
   const isSeller = AuthService.isSeller();
@@ -276,50 +280,118 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Aplicar filtro por status
   useEffect(() => {
-    let filteredByStatus = [...orders];
+    console.log("Aplicando filtros e ordenação...");
+    
+    // Começamos com todos os pedidos
+    let filteredResults = [...orders];
 
-    // Primeiro, aplicar o filtro de papel do usuário
+    // 1. Filtrar por papel do usuário
     if (isSeller) {
-      // Se o usuário for vendedor, mostrar apenas seus pedidos
-      filteredByStatus = filteredByStatus.filter(order => 
+      filteredResults = filteredResults.filter(order => 
         order.vendedor === currentUserName || 
         order.vendedor === currentUserEmail
       );
     } else if (isOperator) {
-      // Se o usuário for operador, mostrar apenas pedidos atribuídos a ele
-      filteredByStatus = filteredByStatus.filter(order => 
+      filteredResults = filteredResults.filter(order => 
         order.operador === currentUserName || 
         order.operador === currentUserEmail
       );
     }
 
-    // Filtro de status para pedidos deletados - só mostrar se for admin ou explicitamente filtrado
+    // 2. Filtrar pedidos deletados
     if (!isAdmin && (!selectedStatus || selectedStatus?.value !== 'deletado')) {
-      // Para não-administradores e sem filtro específico, esconder pedidos deletados
-      filteredByStatus = filteredByStatus.filter(order => 
+      filteredResults = filteredResults.filter(order => 
         !order.situacaoVenda || 
         order.situacaoVenda.toLowerCase() !== 'deletado'
       );
     }
 
-    // Aplicar o filtro de status selecionado na sidebar
+    // 3. Aplicar filtro de status da sidebar
     if (selectedStatus) {
-        if (selectedStatus.field === 'situacaoVenda') {
-        filteredByStatus = filteredByStatus.filter(order =>
+      if (selectedStatus.field === 'situacaoVenda') {
+        filteredResults = filteredResults.filter(order =>
           typeof order.situacaoVenda === 'string' &&
           order.situacaoVenda.toLowerCase() === selectedStatus.value.toLowerCase()
         );
       } else if (selectedStatus.field === 'special' && selectedStatus.value === 'dataRecebimento') {
-        // Filtro especial para "Receber Hoje"
         const today = getTodayDateBR();
-        filteredByStatus = filteredByStatus.filter(order => order.dataRecebimento === today);
+        filteredResults = filteredResults.filter(order => order.dataRecebimento === today);
       }
     }
 
-    console.log(`Filtrados ${filteredByStatus.length} pedidos por status: ${selectedStatus?.value || 'todos'}`);
-    setFilteredOrders(filteredByStatus);
+    // 4. Aplicar filtros de data
+    if (dateFrom || dateTo) {
+      filteredResults = filteredResults.filter(order => {
+      try {
+        const parts = order.dataVenda.split('/');
+        if (parts.length !== 3) return false;
+
+        const [day, month, year] = parts.map(Number);
+        if (isNaN(day) || isNaN(month) || isNaN(year)) return false;
+
+        const orderDate = new Date(Date.UTC(year, month - 1, day));
+        if (isNaN(orderDate.getTime())) return false;
+
+        const afterFrom = dateFrom ? orderDate >= dateFrom : true;
+        const beforeTo = dateTo ? orderDate <= dateTo : true;
+
+          return afterFrom && beforeTo;
+      } catch (e) {
+        console.error("Error filtering by date for order:", order.idVenda, e);
+          return false;
+        }
+      });
+    }
+
+    // 5. Aplicar filtro de vendedor
+    if (vendedorFilter) {
+      filteredResults = filteredResults.filter(order =>
+        order.vendedor && order.vendedor.toLowerCase().includes(vendedorFilter.toLowerCase())
+      );
+    }
+
+    // 6. Aplicar filtro de operador
+    if (operadorFilter) {
+      filteredResults = filteredResults.filter(order =>
+        order.operador && order.operador.toLowerCase().includes(operadorFilter.toLowerCase())
+      );
+    }
+
+    // 7. Aplicar ordenação
+    filteredResults.sort((a, b) => {
+      try {
+        if (orderBy === 'dataVenda') {
+          const dateA = parseDate(a.dataVenda);
+          const dateB = parseDate(b.dataVenda);
+          return order === 'desc' 
+            ? dateB.getTime() - dateA.getTime() // Ordem decrescente (mais recente primeiro)
+            : dateA.getTime() - dateB.getTime(); // Ordem crescente (mais antigo primeiro)
+        }
+        return 0;
+      } catch (error) {
+        console.error("Erro ao ordenar pedidos por data:", error);
+        return 0;
+      }
+    });
+
+    console.log(`Total de pedidos filtrados: ${filteredResults.length} de ${orders.length}`);
+    setFilteredOrders(filteredResults);
     
-  }, [orders, selectedStatus, isAdmin, isSeller, isOperator, currentUserName, currentUserEmail]);
+  }, [
+    orders, 
+    selectedStatus, 
+    isAdmin, 
+    isSeller, 
+    isOperator, 
+    currentUserName, 
+    currentUserEmail,
+    dateFrom,
+    dateTo,
+    vendedorFilter,
+    operadorFilter,
+    order,
+    orderBy
+  ]);
 
   // Função para obter vendedores únicos, mostrando apenas o seu próprio para vendedores
   const getUniqueVendedores = () => {
@@ -416,86 +488,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  // Aplicar outros filtros (data, vendedor, operador)
-  const ordersWithAllFilters = finalFilteredOrders.filter(order => {
-    // Filtro por data
-    let passesDateFilter = true;
-    if (dateFrom || dateTo) {
-      try {
-        const parts = order.dataVenda.split('/');
-        if (parts.length !== 3) return false;
-
-        const [day, month, year] = parts.map(Number);
-        if (isNaN(day) || isNaN(month) || isNaN(year)) return false;
-
-        const orderDate = new Date(Date.UTC(year, month - 1, day));
-        if (isNaN(orderDate.getTime())) return false;
-
-        const afterFrom = dateFrom ? orderDate >= dateFrom : true;
-        const beforeTo = dateTo ? orderDate <= dateTo : true;
-
-        passesDateFilter = afterFrom && beforeTo;
-      } catch (e) {
-        console.error("Error filtering by date for order:", order.idVenda, e);
-        passesDateFilter = false;
-      }
-    }
-
-    // Filtro por vendedor
-    const passesVendedorFilter = !vendedorFilter ||
-      (order.vendedor && order.vendedor.toLowerCase().includes(vendedorFilter.toLowerCase()));
-
-    // Filtro por operador
-    const passesOperadorFilter = !operadorFilter ||
-      (order.operador && order.operador.toLowerCase().includes(operadorFilter.toLowerCase()));
-
-    // Retorna true apenas se passar por todos os filtros
-    return passesDateFilter && passesVendedorFilter && passesOperadorFilter;
-  });
-
-  // Função para lidar com solicitações de ordenação
-  const createSortHandler = (property: string) => (event: React.MouseEvent<unknown>) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
-  };
-
-  // Estado para controlar a ordenação
-  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  const [orderBy, setOrderBy] = useState<string>('dataVenda');
-
-  // Ordenar os pedidos por data de venda, do mais recente para o mais antigo
-  const sortedFilteredOrders = [...ordersWithAllFilters].sort((a, b) => {
-    try {
-      if (orderBy === 'dataVenda') {
-        const dateA = parseDate(a.dataVenda);
-        const dateB = parseDate(b.dataVenda);
-        return order === 'desc' 
-          ? dateB.getTime() - dateA.getTime() // Ordem decrescente (mais recente primeiro)
-          : dateA.getTime() - dateB.getTime(); // Ordem crescente (mais antigo primeiro)
-      }
-      return 0;
-    } catch (error) {
-      console.error("Erro ao ordenar pedidos por data:", error);
-      return 0;
-    }
-  });
-
-  // Atualizar filteredOrders sempre que sortedFilteredOrders mudar
-  useEffect(() => {
-    console.log("Atualizando pedidos filtrados...");
-    console.log("Primeiro pedido data:", sortedFilteredOrders[0]?.dataVenda);
-    console.log("Ordem atual:", order, orderBy);
-    setFilteredOrders(sortedFilteredOrders);
-  }, [sortedFilteredOrders, order, orderBy]);
-
-  const totalSales = sortedFilteredOrders.reduce((sum, order) => sum + order.valorVenda, 0);
-  const totalReceived = sortedFilteredOrders.reduce((sum, order) => sum + order.valorRecebido, 0);
-  const completedOrders = sortedFilteredOrders.filter(o =>
+  const totalSales = filteredOrders.reduce((sum, order) => sum + order.valorVenda, 0);
+  const totalReceived = filteredOrders.reduce((sum, order) => sum + order.valorRecebido, 0);
+  const completedOrders = filteredOrders.filter(o =>
     typeof o.situacaoVenda === 'string' &&
     o.situacaoVenda.toLowerCase() === 'completo'
   ).length;
-  const conversionRate = Math.round((completedOrders / (sortedFilteredOrders.length || 1)) * 100);
+  const conversionRate = Math.round((completedOrders / (filteredOrders.length || 1)) * 100);
 
   const getTodayDateBR = (): string => {
     // Criar data usando timezone de São Paulo, Brasil (GMT-3)
@@ -513,11 +512,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const todayDate = getTodayDateBR();
 
   // Calcula recebimentos do dia atual
-  const todayFullPayments = sortedFilteredOrders
+  const todayFullPayments = filteredOrders
     .filter(order => order.dataRecebimento === todayDate)
     .reduce((sum, order) => sum + order.valorRecebido, 0);
 
-  const todayPartialPayments = sortedFilteredOrders
+  const todayPartialPayments = filteredOrders
     .filter(order => order.dataPagamentoParcial === todayDate)
     .reduce((sum, order) => sum + order.pagamentoParcial, 0);
 
@@ -530,7 +529,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   };
 
   // Preparar dados para a tabela de resumo
-  const statusCounts = sortedFilteredOrders.reduce((acc: Record<string, number>, order) => {
+  const statusCounts = filteredOrders.reduce((acc: Record<string, number>, order) => {
     const status = order.situacaoVenda || 'Desconhecido';
     acc[status] = (acc[status] || 0) + 1;
     return acc;
