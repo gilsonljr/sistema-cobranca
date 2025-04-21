@@ -177,21 +177,21 @@ const Navbar = () => {
         <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
           <Button
             component={Link}
-            to="/"
+            to="/admin"
             startIcon={<DashboardIcon />}
             sx={{
-              color: location.pathname === '/' ? 'primary.main' : 'text.secondary',
+              color: location.pathname === '/admin' ? 'primary.main' : 'text.secondary',
               px: 2,
               borderRadius: '8px',
               textTransform: 'none',
               fontWeight: 500,
-              bgcolor: location.pathname === '/' ? 'rgba(33, 150, 243, 0.05)' : 'transparent',
+              bgcolor: location.pathname === '/admin' ? 'rgba(33, 150, 243, 0.05)' : 'transparent',
               '&:hover': {
-                bgcolor: location.pathname === '/' ? 'rgba(33, 150, 243, 0.08)' : 'rgba(0, 0, 0, 0.02)',
+                bgcolor: location.pathname === '/admin' ? 'rgba(33, 150, 243, 0.08)' : 'rgba(0, 0, 0, 0.02)',
               },
             }}
           >
-            Dashboard
+            Admin Dashboard
           </Button>
           <Button
             aria-controls="reports-menu"
