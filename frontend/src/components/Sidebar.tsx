@@ -301,7 +301,7 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
                   <ListItemIcon>
                     <DashboardIcon sx={{ color: '#673AB7' }} />
                   </ListItemIcon>
-                  <ListItemText primary="Dashboard Admin" />
+                  <ListItemText primary="Home Dashboard" />
                 </ListItemButton>
               </List>
             </Collapse>

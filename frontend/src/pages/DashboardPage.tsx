@@ -598,7 +598,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h5" fontWeight={600}>
-          Dashboard
+          Home Dashboard
         </Typography>
           <Typography variant="body2" color="text.secondary">
             Visão geral de todos os pedidos e desempenho

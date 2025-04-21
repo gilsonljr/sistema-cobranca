@@ -110,7 +110,7 @@ const AdminDashboardPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4" gutterBottom>
-          Dashboard Administrativo
+          Home Dashboard
         </Typography>
         {conversionSettings.enabled && (
           <Chip
