@@ -24,6 +24,7 @@ import {
   FormControl,
   InputLabel,
   SelectChangeEvent,
+  Tooltip,
 } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
@@ -50,6 +51,7 @@ import { ptBR } from 'date-fns/locale';
 import WebhookTester from '../components/WebhookTester';
 import WebhookIcon from '@mui/icons-material/Webhook';
 import AuthService from '../services/AuthService';
+import { useConversion } from '../contexts/ConversionContext';
 
 const OverviewCard = ({ title, value, icon, color, subtitle = '', onClick = null, customValueStyle = {}, showProgressBar = false, progressValue = 0 }: any) => (
   <Card
@@ -171,11 +173,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const [vendedores, setVendedores] = useState<string[]>([]);
   const [operadores, setOperadores] = useState<string[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
-  
+
   // Estado para controlar a ordenação
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [orderBy, setOrderBy] = useState<string>('dataVenda');
-  
+
   // Obter informações de autenticação diretamente do AuthService
   const isAdmin = AuthService.isAdmin();
   const isSeller = AuthService.isSeller();
@@ -281,27 +283,27 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   // Aplicar filtro por status
   useEffect(() => {
     console.log("Aplicando filtros e ordenação...");
-    
+
     // Começamos com todos os pedidos
     let filteredResults = [...orders];
 
     // 1. Filtrar por papel do usuário
     if (isSeller) {
-      filteredResults = filteredResults.filter(order => 
-        order.vendedor === currentUserName || 
+      filteredResults = filteredResults.filter(order =>
+        order.vendedor === currentUserName ||
         order.vendedor === currentUserEmail
       );
     } else if (isOperator) {
-      filteredResults = filteredResults.filter(order => 
-        order.operador === currentUserName || 
+      filteredResults = filteredResults.filter(order =>
+        order.operador === currentUserName ||
         order.operador === currentUserEmail
       );
     }
 
     // 2. Filtrar pedidos deletados
     if (!isAdmin && (!selectedStatus || selectedStatus?.value !== 'deletado')) {
-      filteredResults = filteredResults.filter(order => 
-        !order.situacaoVenda || 
+      filteredResults = filteredResults.filter(order =>
+        !order.situacaoVenda ||
         order.situacaoVenda.toLowerCase() !== 'deletado'
       );
     }
@@ -363,7 +365,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         if (orderBy === 'dataVenda') {
           const dateA = parseDate(a.dataVenda);
           const dateB = parseDate(b.dataVenda);
-          return order === 'desc' 
+          return order === 'desc'
             ? dateB.getTime() - dateA.getTime() // Ordem decrescente (mais recente primeiro)
             : dateA.getTime() - dateB.getTime(); // Ordem crescente (mais antigo primeiro)
         }
@@ -376,14 +378,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     console.log(`Total de pedidos filtrados: ${filteredResults.length} de ${orders.length}`);
     setFilteredOrders(filteredResults);
-    
+
   }, [
-    orders, 
-    selectedStatus, 
-    isAdmin, 
-    isSeller, 
-    isOperator, 
-    currentUserName, 
+    orders,
+    selectedStatus,
+    isAdmin,
+    isSeller,
+    isOperator,
+    currentUserName,
     currentUserEmail,
     dateFrom,
     dateTo,
@@ -399,7 +401,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       // Se for vendedor, retornar apenas o próprio nome
       return [currentUserName].filter(Boolean);
     }
-    
+
     // Para admin e supervisor, mostrar todos
     return Array.from(
       new Set(
@@ -416,7 +418,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       // Se for operador, retornar apenas o próprio nome
       return [currentUserName].filter(Boolean);
     }
-    
+
     // Para admin e supervisor, mostrar todos
     return Array.from(
       new Set(
@@ -433,25 +435,25 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     if (isAdmin) {
       return true;
     }
-    
+
     // Vendedores só podem ver seus próprios pedidos
     if (isSeller && userInfo?.fullName) {
       // Uso de comparação mais flexível (verificando se o nome do usuário está contido no vendedor ou vice-versa)
       const userNameLower = userInfo.fullName.toLowerCase();
       const vendedorLower = order.vendedor?.toLowerCase() || '';
-      
+
       return vendedorLower.includes(userNameLower) || userNameLower.includes(vendedorLower);
     }
-    
+
     // Operadores só podem ver pedidos atribuídos a eles
     if (isOperator && userInfo?.fullName) {
       // Uso de comparação mais flexível (verificando se o nome do usuário está contido no operador ou vice-versa)
       const userNameLower = userInfo.fullName.toLowerCase();
       const operadorLower = order.operador?.toLowerCase() || '';
-      
+
       return operadorLower.includes(userNameLower) || userNameLower.includes(operadorLower);
     }
-    
+
     // Para outros usuários, mostrar todos os pedidos não deletados
     return true;
   });
@@ -488,13 +490,51 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  const totalSales = filteredOrders.reduce((sum, order) => sum + order.valorVenda, 0);
-  const totalReceived = filteredOrders.reduce((sum, order) => sum + order.valorRecebido, 0);
-  const completedOrders = filteredOrders.filter(o =>
+  // Get conversion settings
+  const { conversionSettings, applyConversion } = useConversion();
+
+  // Calculate metrics from orders
+  const rawTotalSales = filteredOrders.reduce((sum, order) => sum + order.valorVenda, 0);
+
+  // For completed sales with empty valor recebido, use the valor venda as the valor recebido
+  const rawTotalReceived = filteredOrders.reduce((sum, order) => {
+    // Check if the order is complete and has empty valor recebido
+    if (
+      typeof order.situacaoVenda === 'string' &&
+      order.situacaoVenda.toLowerCase() === 'completo' &&
+      (!order.valorRecebido || order.valorRecebido === 0)
+    ) {
+      // Use the valor venda as the valor recebido
+      return sum + order.valorVenda;
+    } else {
+      // Otherwise use the actual valor recebido
+      return sum + order.valorRecebido;
+    }
+  }, 0);
+
+  const rawCompletedOrders = filteredOrders.filter(o =>
     typeof o.situacaoVenda === 'string' &&
     o.situacaoVenda.toLowerCase() === 'completo'
   ).length;
-  const conversionRate = Math.round((completedOrders / (filteredOrders.length || 1)) * 100);
+
+  // Apply conversion rates if enabled, otherwise use the calculated values
+  const totalSales = conversionSettings.enabled ? rawTotalSales : rawTotalSales;
+
+  // For received value, use either the converted value or the calculated value
+  const totalReceived = conversionSettings.enabled
+    ? applyConversion(totalSales, 'revenueConversion') // When enabled, received value is a percentage of total sales
+    : rawTotalReceived; // When disabled, use the calculated value
+
+  const completedOrders = rawCompletedOrders; // Keep the actual count of completed orders
+  const filteredOrdersCount = filteredOrders.length; // Keep the actual count of filtered orders
+
+  // Calculate the actual conversion rate based on completed orders
+  const actualConversionRate = Math.round((rawCompletedOrders / Math.max(filteredOrdersCount, 1)) * 100);
+
+  // For conversion rate, use either the setting value or the calculated conversion rate
+  const conversionRate = conversionSettings.enabled
+    ? conversionSettings.revenueConversion
+    : actualConversionRate;
 
   const getTodayDateBR = (): string => {
     // Criar data usando timezone de São Paulo, Brasil (GMT-3)
@@ -514,7 +554,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   // Calcula recebimentos do dia atual
   const todayFullPayments = filteredOrders
     .filter(order => order.dataRecebimento === todayDate)
-    .reduce((sum, order) => sum + order.valorRecebido, 0);
+    .reduce((sum, order) => {
+      // Check if the order is complete and has empty valor recebido
+      if (
+        typeof order.situacaoVenda === 'string' &&
+        order.situacaoVenda.toLowerCase() === 'completo' &&
+        (!order.valorRecebido || order.valorRecebido === 0)
+      ) {
+        // Use the valor venda as the valor recebido
+        return sum + order.valorVenda;
+      } else {
+        // Otherwise use the actual valor recebido
+        return sum + order.valorRecebido;
+      }
+    }, 0);
 
   const todayPartialPayments = filteredOrders
     .filter(order => order.dataPagamentoParcial === todayDate)
@@ -770,11 +823,26 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
       </Box>
 
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 500 }}>Visão Geral</Typography>
+        {conversionSettings.enabled && (
+          <Tooltip title="Os valores exibidos estão ajustados de acordo com as configurações de conversão">
+            <Chip
+              label="Conversão Ativada"
+              color="primary"
+              variant="outlined"
+              size="small"
+              sx={{ fontWeight: 'bold' }}
+            />
+          </Tooltip>
+        )}
+      </Box>
+
       <Grid container spacing={2.5} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <OverviewCard
             title="Total de Vendas"
-            value={filteredOrders.length}
+            value={filteredOrdersCount}
             subtitle={dateFrom && dateTo
               ? `${formatDateForDisplay(dateFrom)} - ${formatDateForDisplay(dateTo)}`
               : dateFrom
@@ -791,7 +859,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <OverviewCard
             title="Valor Total"
             value={`R$ ${totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            subtitle={`R$ ${(totalSales / Math.max(filteredOrders.length, 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} por pedido`}
+            subtitle={conversionSettings.enabled && conversionSettings.revenueConversion !== 100
+              ? `Conversão: ${conversionSettings.revenueConversion}%`
+              : `R$ ${(totalSales / Math.max(filteredOrdersCount, 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} por pedido`
+            }
             icon={<AttachMoneyIcon />}
             color="success"
           />
@@ -800,7 +871,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <OverviewCard
             title="Valor Recebido"
             value={`R$ ${totalReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            subtitle={`${Math.round((totalReceived / totalSales) * 100)}% do total de vendas`}
+            subtitle={conversionSettings.enabled && conversionSettings.revenueConversion !== 100
+              ? `Conversão: ${conversionSettings.revenueConversion}%`
+              : `${Math.round((totalReceived / totalSales) * 100)}% do total de vendas`
+            }
             icon={<AttachMoneyIcon />}
             color="info"
             customValueStyle={{ color: '#4CAF50', fontWeight: 700 }}
@@ -810,7 +884,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <OverviewCard
             title="Taxa de Conversão"
             value={`${conversionRate}%`}
-            subtitle={`${completedOrders} pedidos completos`}
+            subtitle={conversionSettings.enabled && conversionSettings.salesConversion !== 100
+              ? `Conversão: ${conversionSettings.salesConversion}%`
+              : `${completedOrders} pedidos completos`
+            }
             icon={<TrendingUpIcon />}
             color="warning"
             showProgressBar={true}
@@ -910,7 +987,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 fontWeight: 500,
               }}
             >
-              {filteredOrders.length} pedidos
+              {conversionSettings.enabled ? filteredOrdersCount : filteredOrders.length} pedidos
+              {conversionSettings.enabled && conversionSettings.salesConversion !== 100 && (
+                <Typography component="span" variant="caption" sx={{ ml: 1, color: 'primary.main' }}>
+                  (Conversão: {conversionSettings.salesConversion}%)
+                </Typography>
+              )}
             </Typography>
           </Box>
         </Box>

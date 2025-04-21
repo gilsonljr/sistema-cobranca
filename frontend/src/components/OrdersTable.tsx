@@ -31,6 +31,8 @@ import {
 import { Order } from '../types/Order';
 import StatusChip from './StatusChip';
 import TrackingStatusChip from './TrackingStatusChip';
+import AdminEditForm from './AdminEditForm';
+import UserEditForm from './UserEditForm';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import CloseIcon from '@mui/icons-material/Close';
@@ -105,13 +107,16 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
   const [editMode, setEditMode] = useState(false);
   const [newObservacao, setNewObservacao] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  
+
+  // Estado para armazenar os valores editados
+  const [editedValues, setEditedValues] = useState<Partial<Order>>({});
+
   // Utilizar o hook de permissões
-  const { 
-    isAdmin, 
-    canDeleteOrders, 
+  const {
+    isAdmin,
+    canDeleteOrders,
     canViewDeletedOrders,
-    filterOrdersByPermission 
+    filterOrdersByPermission
   } = useUserPermissions();
 
   // Histórico de cobrança simulado (em uma aplicação real, isso viria do backend)
@@ -216,13 +221,79 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
 
   // Alternar modo de edição
   const handleEditClick = () => {
+    if (!editMode) {
+      // Inicializar os valores editados com os valores atuais do pedido
+      setEditedValues(selectedOrder || {});
+    } else {
+      // Limpar os valores editados ao sair do modo de edição
+      setEditedValues({});
+    }
     setEditMode(!editMode);
   };
 
   // Função para salvar as alterações no pedido
   const handleSaveEdit = () => {
-    // Código para salvar as alterações no pedido
+    if (selectedOrder && onOrderUpdate) {
+      // Criar o pedido atualizado com os valores editados
+      const updatedOrder = {
+        ...selectedOrder,
+        ...editedValues,
+        ultimaAtualizacao: new Date().toLocaleDateString('pt-BR')
+      };
+
+      // Se o status for "Completo" e o valor recebido estiver vazio, usar o valor da venda
+      if (
+        typeof updatedOrder.situacaoVenda === 'string' &&
+        updatedOrder.situacaoVenda.toLowerCase() === 'completo' &&
+        (!updatedOrder.valorRecebido || updatedOrder.valorRecebido === 0) &&
+        updatedOrder.valorVenda
+      ) {
+        updatedOrder.valorRecebido = updatedOrder.valorVenda;
+      }
+
+      console.log('Saving edited values:', editedValues);
+      console.log('Updated order:', updatedOrder);
+
+      // Chamar o callback de atualização
+      onOrderUpdate(updatedOrder);
+
+      // Atualizar o pedido selecionado
+      setSelectedOrder(updatedOrder);
+
+      // Adicionar registro ao histórico de cobrança
+      const currentDate = new Date();
+      const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getFullYear()} ${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
+
+      const newHistoricoItem: CobrancaHistorico = {
+        data: formattedDate,
+        observacao: `Informações do pedido atualizadas`,
+        situacao: updatedOrder.situacaoVenda
+      };
+
+      setHistoricoCobranca([newHistoricoItem, ...historicoCobranca]);
+
+      // Mostrar alerta de sucesso
+      alert('Alterações salvas com sucesso!');
+    }
+
+    // Limpar os valores editados e sair do modo de edição
+    setEditedValues({});
     setEditMode(false);
+  };
+
+  // Função para atualizar os valores editados
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    console.log(`Editing field ${name} with value ${value}`);
+
+    setEditedValues(prev => {
+      const newValues = {
+        ...prev,
+        [name]: value
+      };
+      console.log('Updated editedValues:', newValues);
+      return newValues;
+    });
   };
 
   // Função para atualizar o status do pedido
@@ -233,20 +304,29 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
         ...selectedOrder,
         situacaoVenda: newStatus
       };
-      
+
+      // Se o status for "Completo" e o valor recebido estiver vazio, usar o valor da venda
+      if (
+        newStatus.toLowerCase() === 'completo' &&
+        (!selectedOrder.valorRecebido || selectedOrder.valorRecebido === 0) &&
+        selectedOrder.valorVenda
+      ) {
+        updatedOrder.valorRecebido = selectedOrder.valorVenda;
+      }
+
       // Chamar o callback de atualização
       onOrderUpdate(updatedOrder);
-      
+
       // Adicionar registro ao histórico de cobrança
       const currentDate = new Date();
       const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getFullYear()} ${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
-      
+
       const newHistoricoItem: CobrancaHistorico = {
         data: formattedDate,
         observacao: `Status atualizado para: ${newStatus}`,
         situacao: newStatus
       };
-      
+
       setHistoricoCobranca([newHistoricoItem, ...historicoCobranca]);
     }
   };
@@ -269,7 +349,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
         ...selectedOrder,
         situacaoVenda: 'Deletado',
       };
-      
+
       onOrderUpdate(updatedOrder);
       setDeleteDialogOpen(false);
       handleCloseDrawer(); // Fechar o drawer após a exclusão
@@ -281,13 +361,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
     if (newObservacao.trim()) {
       const currentDate = new Date();
       const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getFullYear()} ${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
-      
+
       const newHistoricoItem: CobrancaHistorico = {
         data: formattedDate,
         observacao: newObservacao.trim(),
         situacao: selectedOrder?.situacaoVenda || 'Pendente'
       };
-      
+
       setHistoricoCobranca([newHistoricoItem, ...historicoCobranca]);
       setNewObservacao('');
     }
@@ -477,7 +557,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
                   >
                     <EditIcon />
                   </IconButton>
-                  
+
                   {/* Botão de excluir apenas para admins */}
                   {canDeleteOrders() && (
                     <IconButton
@@ -488,7 +568,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
                       <DeleteIcon />
                     </IconButton>
                   )}
-                  
+
                   {/* Botão de fechar */}
                   <IconButton
                     aria-label="fechar"
@@ -848,9 +928,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
                       Valor Recebido
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#4caf50' }}>
-                      {selectedOrder.valorRecebido !== undefined && selectedOrder.valorRecebido !== null
-                        ? `R$ ${selectedOrder.valorRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                        : 'R$ 0,00'}
+                      {(() => {
+                        // For completed sales with empty valor recebido, use the valor venda
+                        if (
+                          typeof selectedOrder.situacaoVenda === 'string' &&
+                          selectedOrder.situacaoVenda.toLowerCase() === 'completo' &&
+                          (!selectedOrder.valorRecebido || selectedOrder.valorRecebido === 0)
+                        ) {
+                          return `R$ ${selectedOrder.valorVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (valor da venda)`;
+                        } else {
+                          return selectedOrder.valorRecebido !== undefined && selectedOrder.valorRecebido !== null
+                            ? `R$ ${selectedOrder.valorRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                            : 'R$ 0,00';
+                        }
+                      })()}
                     </Typography>
                   </Grid>
 
@@ -898,66 +989,23 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, onOrderUpdate }) => {
 
               {/* Formulário de Edição (visível apenas em modo de edição) */}
               {editMode && (
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    mb: 3,
-                    borderRadius: 2,
-                    border: '1px solid rgba(0,0,0,0.08)',
-                    bgcolor: 'white',
-                    borderLeft: '4px solid #3f51b5'
-                  }}
-                >
-                  <Typography variant="subtitle2" sx={{ mb: 2, color: '#637381', fontWeight: 600 }}>
-                    Editar Informações
-                  </Typography>
-
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Valor Recebido"
-                        defaultValue={selectedOrder.valorRecebido}
-                        fullWidth
-                        size="small"
-                        type="number"
-                        InputProps={{
-                          startAdornment: <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>R$</Box>,
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Data de Negociação"
-                        defaultValue={selectedOrder.dataNegociacao}
-                        fullWidth
-                        size="small"
-                        placeholder="DD/MM/AAAA"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Forma de Pagamento"
-                        defaultValue={selectedOrder.formaPagamento}
-                        fullWidth
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        sx={{
-                          mt: 1,
-                          borderRadius: 1.5,
-                          textTransform: 'none',
-                        }}
-                      >
-                        Salvar Alterações
-                      </Button>
-                    </Grid>
-                  </Grid>
-                </Paper>
+                <>
+                  {isAdmin ? (
+                    <AdminEditForm
+                      selectedOrder={selectedOrder}
+                      editedValues={editedValues}
+                      handleEditChange={handleEditChange}
+                      handleSaveEdit={handleSaveEdit}
+                    />
+                  ) : (
+                    <UserEditForm
+                      selectedOrder={selectedOrder}
+                      editedValues={editedValues}
+                      handleEditChange={handleEditChange}
+                      handleSaveEdit={handleSaveEdit}
+                    />
+                  )}
+                </>
               )}
 
               {/* Histórico de Cobrança */}

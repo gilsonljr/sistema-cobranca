@@ -12,9 +12,17 @@ import SettingsPage from './pages/SettingsPage';
 import TrackingPage from './pages/TrackingPage';
 import DuplicateOrdersPage from './pages/DuplicateOrdersPage';
 import LoginPage from './pages/LoginPage';
+// Import new financial pages
+import FacebookAdsPage from './pages/financeiro/FacebookAdsPage';
+import WhatsAppPage from './pages/financeiro/WhatsAppPage';
+import VendasPage from './pages/financeiro/VendasPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 import PasswordResetPage from './pages/PasswordResetPage';
 import TestLoginPage from './pages/TestLoginPage';
 import ExamplePage from './pages/ExamplePage';
+// Import Nutra Logistics pages
+import NutraDashboardPage from './pages/nutra/NutraDashboardPage';
+import NutraProductsPage from './pages/nutra/ProductsPage';
 import UsersPage from './pages/UsersPage';
 import UsersPageSimple from './pages/UsersPageSimple';
 import UsersPageBasic from './pages/UsersPageBasic';
@@ -46,6 +54,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import { UserProvider } from './contexts/UserContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { OrderDataProvider } from './contexts/OrderDataContext';
+import { ConversionProvider } from './contexts/ConversionContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Função para sincronizar usuários entre diferentes locais de armazenamento
@@ -116,7 +125,7 @@ const syncAllUsers = () => {
       }
     });
 
-    // Não vamos mais criar usuários automaticamente para vendedores/operadores 
+    // Não vamos mais criar usuários automaticamente para vendedores/operadores
     // encontrados nos pedidos. Em vez disso, usaremos a página de padronização
     // para vincular manualmente vendedores/operadores a usuários existentes.
 
@@ -141,7 +150,7 @@ function App() {
   useEffect(() => {
     // Sync all users
     syncAllUsers();
-    
+
     // Initialize password service to ensure consistent password storage
     UserPasswordService.initialize();
     console.log("UserPasswordService initialized on app start");
@@ -227,7 +236,7 @@ function App() {
 
     // Exibir feedback com informação sobre vendedores/operadores não vinculados
     const message = `Importação concluída com sucesso!\n${newCount} registros importados\n${updatedCount} registros atualizados\n${ignoredCount} registros ignorados\n\nTotal de pedidos no sistema: ${updatedOrders.length}\n\nSe houver novos vendedores ou operadores nos pedidos, use a página "Padronizar" para vinculá-los a usuários existentes.`;
-    
+
     alert(message);
 
     return updatedOrders;
@@ -311,8 +320,9 @@ function App() {
           <UserProvider>
             <AuthProvider>
               <OrderDataProvider>
-                <CssBaseline />
-                <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ptBR}>
+                <ConversionProvider>
+                  <CssBaseline />
+                  <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ptBR}>
                 <BrowserRouter>
                   <Routes>
                     <Route path="/login" element={<LoginPage />} />
@@ -361,6 +371,14 @@ function App() {
                               <Route path="/restore-data" element={<RestoreDataPage />} />
                               <Route path="/password-diagnostic" element={<PasswordDiagnosticPage />} />
                               <Route path="/correios-api" element={<CorreiosApiManagementPage />} />
+                              {/* New Financial Routes */}
+                              <Route path="/admin" element={<AdminDashboardPage />} />
+                              <Route path="/financeiro/facebook" element={<FacebookAdsPage />} />
+                              <Route path="/financeiro/whatsapp" element={<WhatsAppPage orders={orders} />} />
+                              <Route path="/financeiro/vendas" element={<VendasPage orders={orders} />} />
+                              {/* Nutra Logistics Routes */}
+                              <Route path="/nutra" element={<NutraDashboardPage />} />
+                              <Route path="/nutra/products" element={<NutraProductsPage />} />
                             </Routes>
                           </Box>
                         </Box>
@@ -369,6 +387,7 @@ function App() {
                   </Routes>
                 </BrowserRouter>
                 </LocalizationProvider>
+                </ConversionProvider>
               </OrderDataProvider>
             </AuthProvider>
           </UserProvider>

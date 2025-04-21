@@ -20,18 +20,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create prestart script
-RUN echo '#!/bin/bash\n\
-echo "Running database migrations..."\n\
-python -m app.db.init_db\n\
-exec "$@"' > /app/prestart.sh \
-    && chmod +x /app/prestart.sh
-
 # Expose port
 EXPOSE 8000
 
-# Set the entrypoint
-ENTRYPOINT ["/app/prestart.sh"]
+# Install PostgreSQL client for pg_isready
+RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+
+# Copy initialization script
+COPY init.sh /app/init.sh
+RUN chmod +x /app/init.sh
 
 # Start the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/init.sh"]

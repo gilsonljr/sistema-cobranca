@@ -26,33 +26,33 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<AuthTokens> {
     try {
-      // Force mock mode to true for development
-      const mockMode = true; // Forcing mock mode to true
-      console.log('Login attempt:', credentials.email, 'Mock mode:', mockMode, 'Forced to true');
+      // Use environment variable for mock mode
+      const mockMode = process.env.REACT_APP_MOCK_API === 'true';
+      console.log('Login attempt:', credentials.email, 'Mock mode:', mockMode);
 
       if (mockMode) {
         console.log('Mock mode is enabled, checking credentials...');
-        
+
         // Use UserPasswordService to verify credentials
         const isValid = UserPasswordService.verifyPassword(credentials.email, credentials.password);
-        
+
         if (!isValid) {
           console.log('Invalid credentials, password verification failed');
           throw new Error('Invalid credentials - Password verification failed');
         }
-        
+
         // Get default_users to retrieve role and other user information
         const defaultUsersStr = localStorage.getItem('default_users');
         const defaultUsers = defaultUsersStr ? JSON.parse(defaultUsersStr) : {};
         const user = defaultUsers[credentials.email.toLowerCase()];
-        
+
         if (!user) {
           console.log('User not found in default_users');
           throw new Error('Invalid credentials - User not found');
         }
-        
+
         console.log('Valid credentials for user:', user);
-        
+
         // Store user info
         localStorage.setItem('userInfo', JSON.stringify({
           id: user.id,
@@ -60,18 +60,18 @@ class AuthService {
           fullName: user.fullName,
           role: user.role
         }));
-        
+
         // Generate tokens based on user role
-        const tokenPrefix = user.role === 'admin' ? 'admin' : 
-                            user.role === 'supervisor' ? 'supervisor' : 
+        const tokenPrefix = user.role === 'admin' ? 'admin' :
+                            user.role === 'supervisor' ? 'supervisor' :
                             user.role === 'collector' ? 'collector' : 'seller';
-        
+
         const tokens = {
           access_token: `mock-${tokenPrefix}-token-${Date.now()}`,
           refresh_token: `mock-${tokenPrefix}-refresh-token-${Date.now()}`,
           token_type: 'bearer'
         };
-        
+
         localStorage.setItem('authTokens', JSON.stringify(tokens));
         return tokens;
       }
@@ -107,8 +107,8 @@ class AuthService {
         throw new Error('No refresh token available');
       }
 
-      // Force mock mode to true for development
-      const mockMode = true; // Forcing mock mode to true
+      // Use environment variable for mock mode
+      const mockMode = process.env.REACT_APP_MOCK_API === 'true';
 
       if (mockMode) {
         // Check if it's a mock token and return a new mock token
@@ -154,8 +154,8 @@ class AuthService {
    */
   async fetchUserInfo(): Promise<UserInfo> {
     try {
-      // Force mock mode to true for development
-      const mockMode = true; // Forcing mock mode to true
+      // Use environment variable for mock mode
+      const mockMode = process.env.REACT_APP_MOCK_API === 'true';
 
       if (mockMode) {
         // Return mock user info from localStorage

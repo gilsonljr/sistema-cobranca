@@ -7,6 +7,7 @@ import AuthService from '../services/AuthService';
 import LoginPage from '../pages/LoginPage';
 import PasswordResetPage from '../pages/PasswordResetPage';
 import DashboardPage from '../pages/DashboardPage';
+import AdminDashboardPage from '../pages/AdminDashboardPage';
 import ReportsPage from '../pages/ReportsPage';
 import TrackingPage from '../pages/TrackingPage';
 import DuplicateOrdersPage from '../pages/DuplicateOrdersPage';
@@ -83,6 +84,14 @@ export const routes: RouteObject[] = [
           onStatusSelect={() => {}}
           clearAllOrders={() => {}}
         />
+      </AuthGuard>
+    ),
+  },
+  {
+    path: '/admin',
+    element: (
+      <AuthGuard requiredRole="admin">
+        <AdminDashboardPage />
       </AuthGuard>
     ),
   },

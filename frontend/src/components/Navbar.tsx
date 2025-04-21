@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConversaoChanger from './ConversaoChanger';
 import {
   AppBar,
   Toolbar,
@@ -35,6 +36,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AuthService from '../services/AuthService';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -44,6 +46,7 @@ const Navbar = () => {
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [userInfo, setUserInfo] = useState<{id: number, email: string, fullName: string, role: string} | null>(null);
+  const [conversaoChangerOpen, setConversaoChangerOpen] = useState(false);
 
   // Carregar informações do usuário
   useEffect(() => {
@@ -85,6 +88,16 @@ const Navbar = () => {
     handleSettingsMenuClose();
   };
 
+  // Handlers for ConversaoChanger
+  const handleOpenConversaoChanger = () => {
+    setConversaoChangerOpen(true);
+    handleSettingsMenuClose();
+  };
+
+  const handleCloseConversaoChanger = () => {
+    setConversaoChangerOpen(false);
+  };
+
   // Funções para o menu do usuário
   const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setUserMenuAnchor(event.currentTarget);
@@ -95,6 +108,36 @@ const Navbar = () => {
   };
 
   const handleLogout = () => {
+    AuthService.logout();
+  };
+
+  const handleLogoutAndClear = () => {
+    // Clear all cache and cookies
+    if (window.caches) {
+      // Clear application cache
+      caches.keys().then(cacheNames => {
+        cacheNames.forEach(cacheName => {
+          caches.delete(cacheName);
+        });
+      });
+    }
+
+    // Clear cookies
+    document.cookie.split(';').forEach(cookie => {
+      const eqPos = cookie.indexOf('=');
+      const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+    });
+
+    // Clear localStorage (except what's needed for the logout redirect)
+    const authTokens = localStorage.getItem('authTokens');
+    localStorage.clear();
+    localStorage.setItem('authTokens', authTokens || '');
+
+    // Clear sessionStorage
+    sessionStorage.clear();
+
+    // Logout
     AuthService.logout();
   };
 
@@ -244,6 +287,16 @@ const Navbar = () => {
             }}
             sx={{ mt: 1 }}
           >
+            {/* Conversão Changer */}
+            <MenuItem onClick={handleOpenConversaoChanger} sx={{ py: 1, px: 2 }}>
+              <ListItemIcon>
+                <SettingsIcon fontSize="small" sx={{ color: 'primary.main' }} />
+              </ListItemIcon>
+              <ListItemText primary="Conversão Changer" />
+            </MenuItem>
+
+            <Divider />
+
             {/* Seção de Usuários */}
             <MenuItem onClick={() => handleSettingSelect('/users')} sx={{ py: 1, px: 2 }}>
               <ListItemIcon>
@@ -295,7 +348,7 @@ const Navbar = () => {
               </ListItemIcon>
               <ListItemText primary="Diagnóstico de Senhas" />
             </MenuItem>
-            
+
             {/* Integrações */}
             <Divider />
             <Box sx={{ px: 2, py: 0.5 }}>
@@ -408,6 +461,13 @@ const Navbar = () => {
               <ListItemText primary="Meu Perfil" />
             </MenuItem>
 
+            <MenuItem onClick={handleLogoutAndClear} sx={{ py: 1, px: 2 }}>
+              <ListItemIcon>
+                <CleaningServicesIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+              </ListItemIcon>
+              <ListItemText primary="Sair e Limpar" />
+            </MenuItem>
+
             <MenuItem onClick={handleLogout} sx={{ py: 1, px: 2 }}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" sx={{ color: 'text.secondary' }} />
@@ -417,6 +477,9 @@ const Navbar = () => {
           </Menu>
         </Box>
       </Toolbar>
+
+      {/* ConversaoChanger Dialog */}
+      <ConversaoChanger open={conversaoChangerOpen} onClose={handleCloseConversaoChanger} />
     </AppBar>
   );
 };

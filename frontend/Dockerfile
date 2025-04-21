@@ -10,6 +10,9 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci
 
+# Install recharts explicitly
+RUN npm install --save recharts @types/recharts
+
 # Copy all files
 COPY . .
 

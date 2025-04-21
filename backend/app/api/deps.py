@@ -39,6 +39,15 @@ def get_current_active_user(
         raise ValidationError(detail="Inactive user")
     return current_user
 
+def get_current_active_superuser(
+    current_user = Depends(get_current_active_user)
+):
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPERVISOR]:
+        raise AuthorizationError(
+            detail="The user doesn't have enough privileges"
+        )
+    return current_user
+
 def get_current_admin(
     current_user = Depends(get_current_active_user)
 ):

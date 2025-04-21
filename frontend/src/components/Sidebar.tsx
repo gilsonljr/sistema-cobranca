@@ -10,6 +10,7 @@ import {
   Box,
   Chip,
   Divider,
+  Collapse,
 } from '@mui/material';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
@@ -29,7 +30,6 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import HomeIcon from '@mui/icons-material/Home';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import CodeIcon from '@mui/icons-material/Code';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
@@ -37,6 +37,20 @@ import CategoryIcon from '@mui/icons-material/Category';
 import AuthService from '../services/AuthService';
 import { Order } from '../types/Order';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import FacebookIcon from '@mui/icons-material/Facebook';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import ScienceIcon from '@mui/icons-material/Science';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import FactoryIcon from '@mui/icons-material/Factory';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+
 
 export interface StatusFilter {
   field: string;
@@ -59,13 +73,19 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
   const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [currentUserName, setCurrentUserName] = useState('');
 
+  // State for menu expansions
+  const [operacaoOpen, setOperacaoOpen] = useState(false);
+  const [financeiroOpen, setFinanceiroOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [nutraOpen, setNutraOpen] = useState(false);
+
   // Verificar o papel do usuário e obter informações adicionais
   useEffect(() => {
     setIsSeller(AuthService.isSeller());
     setIsAdmin(AuthService.isAdmin());
     setIsSupervisor(AuthService.isSupervisor());
     setIsOperator(AuthService.isCollector());
-    
+
     // Obter informações do usuário logado para filtrar vendas por vendedor/operador
     const userInfo = AuthService.getUserInfo();
     if (userInfo) {
@@ -81,24 +101,24 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
     if (isAdmin || isSupervisor) {
       return ordersToFilter;
     }
-    
+
     // Se for vendedor, mostrar apenas pedidos do próprio vendedor
     if (isSeller) {
       return ordersToFilter.filter(order => {
         // Filtrar por nome exato ou por email (se o nome do vendedor for o email)
-        return order.vendedor === currentUserName || 
+        return order.vendedor === currentUserName ||
                order.vendedor === currentUserEmail;
       });
     }
-    
+
     // Se for operador, mostrar apenas pedidos atribuídos a este operador
     if (isOperator) {
       return ordersToFilter.filter(order => {
-        return order.operador === currentUserName || 
+        return order.operador === currentUserName ||
                order.operador === currentUserEmail;
       });
     }
-    
+
     // Caso padrão, retornar todos os pedidos
     return ordersToFilter;
   }
@@ -114,8 +134,8 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
   };
 
   const getTotalOrders = () => {
-    return filteredOrdersByRole.filter(order => 
-      !!order.idVenda && 
+    return filteredOrdersByRole.filter(order =>
+      !!order.idVenda &&
       (!order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado')
     ).length;
   };
@@ -123,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
   // Todos os métodos abaixo excluem pedidos com status "Deletado" para garantir
   // que esses pedidos não interfiram em nenhum relatório ou contagem total
   // conforme requisito do cliente.
-  
+
   const getPendingPayments = () => {
     return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
@@ -198,16 +218,48 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
         typeof order.situacaoVenda === 'string' &&
         order.situacaoVenda.toLowerCase() === filter.value.toLowerCase()
       ).length;
-      
+
       console.log(`Contagem para ${filter.value}: ${count}`);
     }
 
     // Atualizar o filtro selecionado
     onStatusSelect(filter);
-    
+
     // Se não estiver na dashboard, navegar para lá
     if (location.pathname !== '/') {
       navigate('/');
+    }
+  };
+
+  // Toggle menu handlers
+  const handleOperacaoClick = () => {
+    setOperacaoOpen(!operacaoOpen);
+  };
+
+  const handleFinanceiroClick = () => {
+    setFinanceiroOpen(!financeiroOpen);
+  };
+
+  const handleAdminClick = () => {
+    setAdminOpen(!adminOpen);
+  };
+
+  const handleNutraClick = () => {
+    setNutraOpen(!nutraOpen);
+  };
+
+  // Common styles for list items
+  const listItemStyle = {
+    borderRadius: '8px',
+    mb: 0.5,
+    '&.Mui-selected': {
+      bgcolor: 'rgba(33, 150, 243, 0.05)',
+      '&:hover': {
+        bgcolor: 'rgba(33, 150, 243, 0.08)'
+      }
+    },
+    '&:hover': {
+      bgcolor: 'rgba(0, 0, 0, 0.02)'
     }
   };
 
@@ -228,65 +280,139 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
       }}
     >
       <List sx={{ pt: 2, px: 1.5 }}>
-        <ListItem
-          button
-          component={Link}
-          to="/"
-          selected={location.pathname === '/'}
-          sx={{
-            borderRadius: '8px',
-            mb: 0.5,
-            '&.Mui-selected': {
-              bgcolor: 'rgba(33, 150, 243, 0.05)',
-              '&:hover': {
-                bgcolor: 'rgba(33, 150, 243, 0.08)'
-              }
-            },
-            '&:hover': {
-              bgcolor: 'rgba(0, 0, 0, 0.02)'
-            }
-          }}
-        >
+        {/* Admin Section - Only visible to admins */}
+        {isAdmin && (
+          <>
+            <ListItemButton onClick={handleAdminClick}>
+              <ListItemIcon>
+                <AdminPanelSettingsIcon sx={{ color: '#673AB7' }} />
+              </ListItemIcon>
+              <ListItemText primary="Administração" />
+              {adminOpen ? <ExpandLess /> : <ExpandMore />}
+            </ListItemButton>
+            <Collapse in={adminOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/admin"
+                  selected={location.pathname === '/admin'}
+                  sx={listItemStyle}
+                >
+                  <ListItemIcon>
+                    <DashboardIcon sx={{ color: '#673AB7' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Dashboard Admin" />
+                </ListItemButton>
+              </List>
+            </Collapse>
+            <Divider />
+          </>
+        )}
+
+        {/* Operação Vendas Section */}
+        <ListItem button onClick={handleOperacaoClick} sx={listItemStyle}>
           <ListItemIcon>
-            <HomeIcon color={location.pathname === '/' ? 'primary' : 'inherit'} />
+            <StorefrontIcon sx={{ color: '#2196F3' }} />
           </ListItemIcon>
-          <ListItemText primary="Tela Inicial" />
+          <ListItemText primary="Operação Vendas" />
+          {operacaoOpen ? <ExpandLess /> : <ExpandMore />}
         </ListItem>
 
-        {/* Mostrar link para página de vendedor apenas para vendedores */}
-        {isSeller && (
-          <ListItem
-            button
-            component={Link}
-            to="/vendedor"
-            selected={location.pathname === '/vendedor'}
-            sx={{
-              borderRadius: '8px',
-              mb: 0.5,
-              '&.Mui-selected': {
-                bgcolor: 'rgba(33, 150, 243, 0.05)',
-                '&:hover': {
-                  bgcolor: 'rgba(33, 150, 243, 0.08)'
-                }
-              },
-              '&:hover': {
-                bgcolor: 'rgba(0, 0, 0, 0.02)'
-              }
-            }}
-          >
-            <ListItemIcon>
-              <ShoppingCartIcon color={location.pathname === '/vendedor' ? 'primary' : 'inherit'} />
-            </ListItemIcon>
-            <ListItemText primary="Meus Pedidos" />
-          </ListItem>
+        <Collapse in={operacaoOpen} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            <ListItem
+              button
+              component={Link}
+              to="/"
+              selected={location.pathname === '/'}
+              sx={{ ...listItemStyle, pl: 4 }}
+            >
+              <ListItemIcon>
+                <DashboardIcon sx={{ color: '#03A9F4' }} />
+              </ListItemIcon>
+              <ListItemText primary="Dashboard" />
+            </ListItem>
+
+            {/* Mostrar link para página de vendedor apenas para vendedores */}
+            {isSeller && (
+              <ListItem
+                button
+                component={Link}
+                to="/vendedor"
+                selected={location.pathname === '/vendedor'}
+                sx={{ ...listItemStyle, pl: 4 }}
+              >
+                <ListItemIcon>
+                  <ShoppingCartIcon sx={{ color: '#F44336' }} />
+                </ListItemIcon>
+                <ListItemText primary="Meus Pedidos" />
+              </ListItem>
+            )}
+          </List>
+        </Collapse>
+
+        {/* Financeiro Section */}
+        {(isAdmin || isSupervisor) && (
+          <>
+            <ListItem button onClick={handleFinanceiroClick} sx={listItemStyle}>
+              <ListItemIcon>
+                <MonetizationOnIcon sx={{ color: '#4CAF50' }} />
+              </ListItemIcon>
+              <ListItemText primary="Financeiro" />
+              {financeiroOpen ? <ExpandLess /> : <ExpandMore />}
+            </ListItem>
+
+            <Collapse in={financeiroOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                <ListItem
+                  button
+                  component={Link}
+                  to="/financeiro/facebook"
+                  selected={location.pathname === '/financeiro/facebook'}
+                  sx={{ ...listItemStyle, pl: 4 }}
+                >
+                  <ListItemIcon>
+                    <FacebookIcon sx={{ color: '#1877F2' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Facebook" />
+                </ListItem>
+
+                <ListItem
+                  button
+                  component={Link}
+                  to="/financeiro/whatsapp"
+                  selected={location.pathname === '/financeiro/whatsapp'}
+                  sx={{ ...listItemStyle, pl: 4 }}
+                >
+                  <ListItemIcon>
+                    <WhatsAppIcon sx={{ color: '#25D366' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="WhatsApp" />
+                </ListItem>
+
+                <ListItem
+                  button
+                  component={Link}
+                  to="/financeiro/vendas"
+                  selected={location.pathname === '/financeiro/vendas'}
+                  sx={{ ...listItemStyle, pl: 4 }}
+                >
+                  <ListItemIcon>
+                    <ReceiptIcon sx={{ color: '#FF5722' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Vendas" />
+                </ListItem>
+              </List>
+            </Collapse>
+          </>
         )}
 
         {/* Mostrar link para pedidos duplicados apenas para admin e supervisor */}
         {(isAdmin || isSupervisor) && (
           <>
-            <ListItem button component={Link} to="/duplicates" selected={location.pathname === '/duplicates'}>
+            <ListItem button component={Link} to="/duplicates" selected={location.pathname === '/duplicates'} sx={listItemStyle}>
               <ListItemIcon>
-                <ContentCopyIcon color={location.pathname === '/duplicates' ? 'primary' : 'inherit'} />
+                <ContentCopyIcon sx={{ color: '#FF9800' }} />
               </ListItemIcon>
               <ListItemText primary="Pedidos Duplicados" />
             </ListItem>
@@ -296,25 +422,52 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
               component={Link}
               to="/products"
               selected={location.pathname === '/products'}
-              sx={{
-                borderRadius: '8px',
-                mb: 0.5,
-                '&.Mui-selected': {
-                  bgcolor: 'rgba(33, 150, 243, 0.05)',
-                  '&:hover': {
-                    bgcolor: 'rgba(33, 150, 243, 0.08)'
-                  }
-                },
-                '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.02)'
-                }
-              }}
+              sx={listItemStyle}
             >
               <ListItemIcon>
-                <CategoryIcon color={location.pathname === '/products' ? 'primary' : 'inherit'} />
+                <CategoryIcon sx={{ color: '#9C27B0' }} />
               </ListItemIcon>
               <ListItemText primary="Produtos e Ofertas" />
             </ListItem>
+
+            {/* Nutra Logistics Section */}
+            <ListItem button onClick={handleNutraClick} sx={listItemStyle}>
+              <ListItemIcon>
+                <ScienceIcon sx={{ color: '#E91E63' }} />
+              </ListItemIcon>
+              <ListItemText primary="ZenCaps" />
+              {nutraOpen ? <ExpandLess /> : <ExpandMore />}
+            </ListItem>
+
+            <Collapse in={nutraOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                <ListItem
+                  button
+                  component={Link}
+                  to="/nutra"
+                  selected={location.pathname === '/nutra'}
+                  sx={{ ...listItemStyle, pl: 4 }}
+                >
+                  <ListItemIcon>
+                    <DashboardIcon sx={{ color: '#E91E63' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Dashboard" />
+                </ListItem>
+
+                <ListItem
+                  button
+                  component={Link}
+                  to="/nutra/products"
+                  selected={location.pathname === '/nutra/products'}
+                  sx={{ ...listItemStyle, pl: 4 }}
+                >
+                  <ListItemIcon>
+                    <InventoryIcon sx={{ color: '#E91E63' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Produtos" />
+                </ListItem>
+              </List>
+            </Collapse>
           </>
         )}
       </List>
@@ -383,7 +536,7 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
                 />
               </ListItem>
             ))}
-            
+
             {/* Item adicional apenas para administradores */}
             {isAdmin && adminStatusItems.map((item, index) => (
               <ListItem
@@ -405,9 +558,9 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
                 <ListItemText
                   primary={item.text}
                   primaryTypographyProps={{
-                    fontSize: '0.875rem', 
+                    fontSize: '0.875rem',
                     fontWeight: 600,
-                    color: '#D32F2F' 
+                    color: '#D32F2F'
                   }}
                 />
                 <Chip

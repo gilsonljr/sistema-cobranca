@@ -18,10 +18,10 @@ class User(Base):
     full_name = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False)
     is_active = Column(Boolean, default=True)
-    
+
     # Relationships
-    assigned_orders = relationship("Order", back_populates="collector")
-    created_orders = relationship("Order", back_populates="seller")
-    
+    assigned_orders = relationship("Order", back_populates="collector", foreign_keys="[Order.collector_id]")
+    created_orders = relationship("Order", back_populates="seller", foreign_keys="[Order.seller_id]")
+
     def __repr__(self):
-        return f"<User {self.email}>" 
+        return f"<User {self.email}>"
