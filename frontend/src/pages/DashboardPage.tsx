@@ -287,7 +287,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     console.log('Filtering orders with selectedStatus:', selectedStatus);
 
     // 1. Filtrar por papel do usuário
-    if (isSeller) {
+    // Admin e supervisor podem ver todos os pedidos
+    if (isAdmin || isSupervisor) {
+      // Não aplicar filtro - mostrar todos os pedidos
+      // Log para depuração
+      console.log(`Dashboard - Admin/Supervisor: Mostrando todos os ${filteredResults.length} pedidos`);
+    }
+    // Vendedor só pode ver seus próprios pedidos
+    else if (isSeller) {
       filteredResults = filteredResults.filter(order => {
         // Verificar se o vendedor está definido
         if (!order.vendedor) return false;
@@ -310,7 +317,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
         return isMatch;
       });
-    } else if (isOperator) {
+    }
+    // Operador só pode ver pedidos atribuídos a ele
+    else if (isOperator) {
       filteredResults = filteredResults.filter(order => {
         if (!order.operador) return false;
 
@@ -424,6 +433,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     isAdmin,
     isSeller,
     isOperator,
+    isSupervisor,
     currentUserName,
     currentUserEmail,
     dateFrom,
@@ -470,8 +480,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Filtrar pedidos com base no papel do usuário
   const filteredByUserRole = filteredOrders.filter(order => {
-    // Admins podem ver todos os pedidos
-    if (isAdmin) {
+    // Admins e supervisores podem ver todos os pedidos
+    if (isAdmin || isSupervisor) {
+      // Log para depuração
+      if (order.situacaoVenda === 'Liberação') {
+        console.log(`Dashboard (Admin/Supervisor) - Pedido em Liberação: ${order.idVenda}, Vendedor: ${order.vendedor}`);
+      }
       return true;
     }
 
@@ -493,7 +507,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
       // Log para depuração
       if (order.situacaoVenda === 'Liberação') {
-        console.log(`Dashboard (filteredByUserRole) - Pedido em Liberação: ${order.idVenda}, Vendedor: ${order.vendedor}, Match: ${isMatch}`);
+        console.log(`Dashboard (Vendedor) - Pedido em Liberação: ${order.idVenda}, Vendedor: ${order.vendedor}, Match: ${isMatch}`);
       }
 
       return isMatch;
