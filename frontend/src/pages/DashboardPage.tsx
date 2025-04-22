@@ -283,20 +283,46 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   // Effect para filtrar pedidos quando os filtros mudam
   useEffect(() => {
     let filteredResults = [...orders];
-    
+
     console.log('Filtering orders with selectedStatus:', selectedStatus);
 
     // 1. Filtrar por papel do usuário
     if (isSeller) {
-      filteredResults = filteredResults.filter(order =>
-        order.vendedor === currentUserName ||
-        order.vendedor === currentUserEmail
-      );
+      filteredResults = filteredResults.filter(order => {
+        // Verificar se o vendedor está definido
+        if (!order.vendedor) return false;
+
+        // Comparar ignorando case e espaços extras
+        const vendedorNormalizado = order.vendedor.toLowerCase().trim();
+        const userNameNormalizado = currentUserName ? currentUserName.toLowerCase().trim() : '';
+        const userEmailNormalizado = currentUserEmail ? currentUserEmail.toLowerCase().trim() : '';
+
+        // Verificar se o nome do vendedor contém o nome do usuário ou vice-versa
+        const isMatch = vendedorNormalizado.includes(userNameNormalizado) ||
+                       userNameNormalizado.includes(vendedorNormalizado) ||
+                       vendedorNormalizado.includes(userEmailNormalizado) ||
+                       userEmailNormalizado.includes(vendedorNormalizado);
+
+        // Log para depuração
+        if (order.situacaoVenda === 'Liberação') {
+          console.log(`Dashboard - Pedido em Liberação: ${order.idVenda}, Vendedor: ${order.vendedor}, Match: ${isMatch}`);
+        }
+
+        return isMatch;
+      });
     } else if (isOperator) {
-      filteredResults = filteredResults.filter(order =>
-        order.operador === currentUserName ||
-        order.operador === currentUserEmail
-      );
+      filteredResults = filteredResults.filter(order => {
+        if (!order.operador) return false;
+
+        const operadorNormalizado = order.operador.toLowerCase().trim();
+        const userNameNormalizado = currentUserName ? currentUserName.toLowerCase().trim() : '';
+        const userEmailNormalizado = currentUserEmail ? currentUserEmail.toLowerCase().trim() : '';
+
+        return operadorNormalizado.includes(userNameNormalizado) ||
+               userNameNormalizado.includes(operadorNormalizado) ||
+               operadorNormalizado.includes(userEmailNormalizado) ||
+               userEmailNormalizado.includes(operadorNormalizado);
+      });
     }
 
     // 2. Filtrar pedidos deletados
@@ -310,22 +336,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     // 3. Aplicar filtro de status da sidebar
     if (selectedStatus) {
       console.log(`Applying status filter: ${selectedStatus.field} = ${selectedStatus.value}`);
-      
+
       if (selectedStatus.field === 'situacaoVenda') {
         // Log all order statuses to debug
         console.log('All order statuses:', filteredResults.map(order => order.situacaoVenda));
-        
+
         // Use case-insensitive comparison
         filteredResults = filteredResults.filter(order => {
           const orderStatus = (order.situacaoVenda || '').toLowerCase();
           const filterValue = selectedStatus.value.toLowerCase();
           const matches = orderStatus === filterValue;
-          
+
           // Debug specific orders
           if (filterValue === 'liberação' || filterValue === 'liberacao') {
             console.log(`Order ${order.idVenda} - Status: '${orderStatus}', matches '${filterValue}': ${matches}`);
           }
-          
+
           return matches;
         });
       } else if (selectedStatus.field === 'special' && selectedStatus.value === 'dataRecebimento') {
@@ -451,20 +477,40 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     // Vendedores só podem ver seus próprios pedidos
     if (isSeller && userInfo?.full_name) {
-      // Uso de comparação mais flexível (verificando se o nome do usuário está contido no vendedor ou vice-versa)
-      const userNameLower = userInfo.full_name.toLowerCase();
-      const vendedorLower = order.vendedor?.toLowerCase() || '';
+      // Verificar se o vendedor está definido
+      if (!order.vendedor) return false;
 
-      return vendedorLower.includes(userNameLower) || userNameLower.includes(vendedorLower);
+      // Comparar ignorando case e espaços extras
+      const vendedorNormalizado = order.vendedor.toLowerCase().trim();
+      const userNameNormalizado = userInfo.full_name.toLowerCase().trim();
+      const userEmailNormalizado = userInfo.email ? userInfo.email.toLowerCase().trim() : '';
+
+      // Verificar se o nome do vendedor contém o nome do usuário ou vice-versa
+      const isMatch = vendedorNormalizado.includes(userNameNormalizado) ||
+                     userNameNormalizado.includes(vendedorNormalizado) ||
+                     vendedorNormalizado.includes(userEmailNormalizado) ||
+                     userEmailNormalizado.includes(vendedorNormalizado);
+
+      // Log para depuração
+      if (order.situacaoVenda === 'Liberação') {
+        console.log(`Dashboard (filteredByUserRole) - Pedido em Liberação: ${order.idVenda}, Vendedor: ${order.vendedor}, Match: ${isMatch}`);
+      }
+
+      return isMatch;
     }
 
     // Operadores só podem ver pedidos atribuídos a eles
     if (isOperator && userInfo?.full_name) {
-      // Uso de comparação mais flexível (verificando se o nome do usuário está contido no operador ou vice-versa)
-      const userNameLower = userInfo.full_name.toLowerCase();
-      const operadorLower = order.operador?.toLowerCase() || '';
+      if (!order.operador) return false;
 
-      return operadorLower.includes(userNameLower) || userNameLower.includes(operadorLower);
+      const operadorNormalizado = order.operador.toLowerCase().trim();
+      const userNameNormalizado = userInfo.full_name.toLowerCase().trim();
+      const userEmailNormalizado = userInfo.email ? userInfo.email.toLowerCase().trim() : '';
+
+      return operadorNormalizado.includes(userNameNormalizado) ||
+             userNameNormalizado.includes(operadorNormalizado) ||
+             operadorNormalizado.includes(userEmailNormalizado) ||
+             userEmailNormalizado.includes(operadorNormalizado);
     }
 
     // Para outros usuários, mostrar todos os pedidos não deletados
@@ -472,7 +518,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   });
 
   // Filtrar pedidos deletados (só mostrar para administradores ou quando explicitamente filtrado)
-  const finalFilteredOrders = filteredByUserRole.filter(order => {
+  const ordersWithoutDeleted = filteredByUserRole.filter(order => {
     // Se o usuário não é admin, ocultar pedidos deletados
     // EXCETO se o status selecionado for explicitamente "deletado"
     const isDeletedOrder = order.situacaoVenda?.toLowerCase() === 'deletado';
@@ -485,6 +531,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     return true;
   });
+
+  // Usar ordersWithoutDeleted em vez de finalFilteredOrders para cálculos e exibição
 
   // Função auxiliar para converter data BR (DD/MM/YYYY) para objeto Date
   const parseDate = (dateStr: string): Date => {
@@ -507,10 +555,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const { conversionSettings, applyConversion } = useConversion();
 
   // Calculate metrics from orders
-  const rawTotalSales = filteredOrders.reduce((sum, order) => sum + order.valorVenda, 0);
+  const rawTotalSales = ordersWithoutDeleted.reduce((sum, order) => sum + order.valorVenda, 0);
 
   // For completed sales with empty valor recebido, use the valor venda as the valor recebido
-  const rawTotalReceived = filteredOrders.reduce((sum, order) => {
+  const rawTotalReceived = ordersWithoutDeleted.reduce((sum, order) => {
     // Check if the order is complete and has empty valor recebido
     if (
       typeof order.situacaoVenda === 'string' &&
@@ -525,7 +573,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   }, 0);
 
-  const rawCompletedOrders = filteredOrders.filter(o =>
+  const rawCompletedOrders = ordersWithoutDeleted.filter(o =>
     typeof o.situacaoVenda === 'string' &&
     o.situacaoVenda.toLowerCase() === 'completo'
   ).length;
@@ -613,9 +661,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       // Force refiltering by setting a dummy state that will trigger a re-render
       setFilteredOrders([]); // Clear the filtered orders to force a refresh
     };
-    
+
     window.addEventListener('update-dashboard-filter', handleUpdateFilter as EventListener);
-    
+
     return () => {
       window.removeEventListener('update-dashboard-filter', handleUpdateFilter as EventListener);
     };
@@ -1025,7 +1073,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           </Box>
         </Box>
 
-        <OrdersTableWithPagination orders={filteredOrders} onOrderUpdate={handleOrderUpdate} />
+        <OrdersTableWithPagination orders={ordersWithoutDeleted} onOrderUpdate={handleOrderUpdate} />
       </Paper>
 
       {/* Tabela de resumo de status - para debug */}
