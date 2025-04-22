@@ -163,10 +163,18 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
         // Comparar ignorando case e espaços extras
         const vendedorNormalizado = order.vendedor.toLowerCase().trim();
         const userNameNormalizado = currentUser.full_name.toLowerCase().trim();
+        const userEmailNormalizado = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
 
         // Verificar se o nome do vendedor contém o nome do usuário ou vice-versa
         const isMatch = vendedorNormalizado.includes(userNameNormalizado) ||
-                       userNameNormalizado.includes(vendedorNormalizado);
+                       userNameNormalizado.includes(vendedorNormalizado) ||
+                       vendedorNormalizado.includes(userEmailNormalizado) ||
+                       userEmailNormalizado.includes(vendedorNormalizado);
+
+        // Log para depuração
+        if (order.situacaoVenda === 'Liberação') {
+          console.log(`Pedido em Liberação: ${order.idVenda}, Vendedor: ${order.vendedor}, Match: ${isMatch}`);
+        }
 
         return isMatch;
       });
@@ -185,9 +193,12 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
 
         const vendedorNormalizado = order.vendedor.toLowerCase().trim();
         const userNameNormalizado = currentUser.full_name.toLowerCase().trim();
+        const userEmailNormalizado = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
 
         return vendedorNormalizado.includes(userNameNormalizado) ||
-               userNameNormalizado.includes(vendedorNormalizado);
+               userNameNormalizado.includes(vendedorNormalizado) ||
+               vendedorNormalizado.includes(userEmailNormalizado) ||
+               userEmailNormalizado.includes(vendedorNormalizado);
       });
 
       if (searchTerm.trim() === '') {
@@ -198,7 +209,8 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
           order.cliente.toLowerCase().includes(searchTermLower) ||
           order.idVenda.toLowerCase().includes(searchTermLower) ||
           order.telefone.toLowerCase().includes(searchTermLower) ||
-          (order.documentoCliente && order.documentoCliente.toLowerCase().includes(searchTermLower))
+          (order.documentoCliente && order.documentoCliente.toLowerCase().includes(searchTermLower)) ||
+          (order.situacaoVenda && order.situacaoVenda.toLowerCase().includes(searchTermLower))
         );
         setFilteredOrders(filtered);
       }
