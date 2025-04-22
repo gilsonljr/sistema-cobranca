@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import TrackingPage from './pages/TrackingPage';
 import DuplicateOrdersPage from './pages/DuplicateOrdersPage';
 import LoginPage from './pages/LoginPage';
+import UnifiedLoginPage from './pages/UnifiedLoginPage';
 // Import new financial pages
 import FacebookAdsPage from './pages/financeiro/FacebookAdsPage';
 import WhatsAppPage from './pages/financeiro/WhatsAppPage';
@@ -23,10 +24,9 @@ import ExamplePage from './pages/ExamplePage';
 // Import Nutra Logistics pages
 import NutraDashboardPage from './pages/nutra/NutraDashboardPage';
 import NutraProductsPage from './pages/nutra/ProductsPage';
-import UsersPage from './pages/UsersPage';
-import UsersPageSimple from './pages/UsersPageSimple';
-import UsersPageBasic from './pages/UsersPageBasic';
+
 import UsersPageFull from './pages/UsersPageFull';
+
 import EditUserPage from './pages/EditUserPage';
 import NewUserPage from './pages/NewUserPage';
 import ImportPageNew from './pages/ImportPageNew';
@@ -40,13 +40,24 @@ import RestoreDataPage from './pages/RestoreDataPage';
 import PasswordDiagnosticPage from './pages/PasswordDiagnosticPage';
 import WebhookPage from './pages/WebhookPage';
 import CorreiosApiManagementPage from './pages/CorreiosApiManagementPage';
+import ZapConfigPage from './pages/ZapConfigPage';
+import VendedorRankingPage from './pages/VendedorRankingPage';
+import OperadorRankingPage from './pages/OperadorRankingPage';
+import ApprovalPage from './pages/ApprovalPage';
+import TrackingManagementPage from './pages/TrackingManagementPage';
 import { Order } from './types/Order';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { ptBR } from 'date-fns/locale'; // Import ptBR locale
 import CorreiosService from './services/CorreiosService';
-import AuthService from './services/AuthService';
-import UserPasswordService from './services/UserPasswordService';
+import UnifiedAuthService from './services/UnifiedAuthService';
+
+import userDataManager from './services/UserDataManager';
+import UserStore from './services/UserStore';
+import UserManager from './services/UserManager';
+import UnifiedUsersPageWrapper from './pages/UnifiedUsersPageWrapper';
+import UnifiedNewUserPageWrapper from './pages/UnifiedNewUserPageWrapper';
+import UnifiedEditUserPageWrapper from './pages/UnifiedEditUserPageWrapper';
 
 // Import custom contexts
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -60,81 +71,32 @@ import ErrorBoundary from './components/ErrorBoundary';
 // Função para sincronizar usuários entre diferentes locais de armazenamento
 const syncAllUsers = () => {
   try {
-    console.log('Sincronizando usuários entre diferentes locais de armazenamento...');
+    console.log('Sincronizando usuários usando UserStore e UserDataManager...');
 
-    // 1. Coletar usuários de todas as fontes
-    const sources = {
-      users: localStorage.getItem('users') ? JSON.parse(localStorage.getItem('users') || '[]') : [],
-      defaultUsers: localStorage.getItem('default_users') ? JSON.parse(localStorage.getItem('default_users') || '{}') : {},
-      mockUsers: localStorage.getItem('mockUsers') ? JSON.parse(localStorage.getItem('mockUsers') || '[]') : []
-    };
+    // Obter usuários atuais do UserStore
+    const usersFromStore = UserStore.getUsers();
+    console.log(`UserStore: ${usersFromStore.length} usuários encontrados`);
 
-    // 2. Unificar usuários - apenas considerando usuários existentes
-    const emailMap = new Map();
+    // Obter usuários atuais do UserDataManager (para compatibilidade)
+    const usersFromManager = userDataManager.getAllUsers();
+    console.log(`UserDataManager: ${usersFromManager.length} usuários encontrados`);
 
-    // Adicionar usuários do contexto principal
-    sources.users.forEach((user: any) => {
-      if (user.email) {
-        emailMap.set(user.email.toLowerCase(), user);
-      }
-    });
+    // Se não houver usuários no UserStore, criar o admin padrão
+    if (usersFromStore.length === 0) {
+      console.log('Nenhum usuário encontrado no UserStore. Resetando para admin padrão...');
+      UserStore.resetToAdmin();
+    }
 
-    // Adicionar usuários do sistema de emergência
-    Object.entries(sources.defaultUsers).forEach(([email, userData]: [string, any]) => {
-      const lowerEmail = email.toLowerCase();
-      if (!emailMap.has(lowerEmail)) {
-        // Converter papel para papéis
-        const papeis: string[] = [];
-        if (userData.role === 'admin') papeis.push('admin');
-        else if (userData.role === 'supervisor') papeis.push('supervisor');
-        else if (userData.role === 'collector') papeis.push('collector');
-        else if (userData.role === 'seller') papeis.push('seller');
+    // Se não houver usuários no UserDataManager, criar o admin padrão (para compatibilidade)
+    if (usersFromManager.length === 0) {
+      console.log('Nenhum usuário encontrado no UserDataManager. Criando admin padrão...');
+      userDataManager.clearAllUsersExceptAdmin();
+    }
 
-        emailMap.set(lowerEmail, {
-          id: userData.id || Date.now(),
-          nome: userData.fullName || email.split('@')[0],
-          email: email,
-          papeis: papeis,
-          permissoes: [],
-          ativo: true
-        });
-      }
-    });
-
-    // Adicionar mock users
-    sources.mockUsers.forEach((user: any) => {
-      if (user.email) {
-        const lowerEmail = user.email.toLowerCase();
-        if (!emailMap.has(lowerEmail)) {
-          // Converter perfil para papéis
-          const papeis: string[] = [];
-          if (user.perfil === 'Administrador') papeis.push('admin');
-          else if (user.perfil === 'Supervisor') papeis.push('supervisor');
-          else if (user.perfil === 'Operador') papeis.push('collector');
-          else if (user.perfil === 'Vendedor') papeis.push('seller');
-
-          emailMap.set(lowerEmail, {
-            id: user.id || Date.now(),
-            nome: user.nome || user.email.split('@')[0],
-            email: user.email,
-            papeis: papeis,
-            permissoes: [],
-            ativo: user.ativo !== undefined ? user.ativo : true
-          });
-        }
-      }
-    });
-
-    // Não vamos mais criar usuários automaticamente para vendedores/operadores
-    // encontrados nos pedidos. Em vez disso, usaremos a página de padronização
-    // para vincular manualmente vendedores/operadores a usuários existentes.
-
-    // 3. Salvar usuários unificados
-    const unifiedUsers = Array.from(emailMap.values());
-    localStorage.setItem('users', JSON.stringify(unifiedUsers));
-
-    console.log(`Sincronização concluída: ${unifiedUsers.length} usuários unificados.`);
-    return unifiedUsers;
+    // Obter usuários atualizados
+    const updatedUsers = UserStore.getUsers();
+    console.log(`Sincronização concluída: ${updatedUsers.length} usuários sincronizados.`);
+    return updatedUsers;
   } catch (error) {
     console.error('Erro ao sincronizar usuários:', error);
     return [];
@@ -146,14 +108,35 @@ function App() {
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter | null>(null);
   const drawerWidth = 240;
 
-  // Syncronize users and initialize services on app start
+  // Initialize user management system on app start
   useEffect(() => {
-    // Sync all users
+    // Initialize UserManager as the single source of truth
+    UserManager.initialize();
+
+    // Migrate data from legacy storages if needed
+    UserManager.migrateFromLegacyStorages();
+
+    // Log initialization status
+    const users = UserManager.getUsers();
+    console.log(`UserManager initialized with ${users.length} users`);
+
+    // For backward compatibility, sync with legacy systems
     syncAllUsers();
 
-    // Initialize password service to ensure consistent password storage
-    UserPasswordService.initialize();
-    console.log("UserPasswordService initialized on app start");
+    // Verificar autenticação atual
+    try {
+      // Verificar se o usuário está autenticado
+      const isAuth = UnifiedAuthService.isAuthenticated();
+      console.log(`Verificação de autenticação: ${isAuth ? 'Autenticado' : 'Não autenticado'}`);
+
+      // Se estiver autenticado, verificar se o token está válido
+      if (isAuth) {
+        const userInfo = UnifiedAuthService.getUserInfo();
+        console.log(`Usuário autenticado: ${userInfo?.fullName} (${userInfo?.email})`);
+      }
+    } catch (error) {
+      console.error("Erro ao verificar autenticação:", error);
+    }
   }, []);
 
   // Handle status selection
@@ -313,6 +296,44 @@ function App() {
     };
   }, [clearAllOrders]);
 
+  // Listener para o evento de reset de usuários do emergency-fix
+  useEffect(() => {
+    const handleUserListReset = () => {
+      console.log('Recebido evento user-list-reset - Forçando recarga de usuários...');
+
+      // Usar o UserStore para garantir que os usuários estejam sincronizados
+      const usersFromStore = UserStore.getUsers();
+      console.log(`UserStore: ${usersFromStore.length} usuários carregados`);
+
+      // Usar o UserDataManager para compatibilidade
+      const usersFromManager = userDataManager.getAllUsers();
+      console.log(`UserDataManager: ${usersFromManager.length} usuários carregados`);
+
+      // Se não houver usuários no UserStore, criar o admin padrão
+      if (usersFromStore.length === 0) {
+        console.log('Nenhum usuário encontrado no UserStore. Resetando para admin padrão...');
+        UserStore.resetToAdmin();
+      }
+
+      // Se não houver usuários no UserDataManager, criar o admin padrão (para compatibilidade)
+      if (usersFromManager.length === 0) {
+        console.log('Nenhum usuário encontrado no UserDataManager. Criando admin padrão...');
+        userDataManager.clearAllUsersExceptAdmin();
+      }
+
+      // Force a page reload to ensure all components refresh their data
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    };
+
+    window.addEventListener('user-list-reset', handleUserListReset);
+
+    return () => {
+      window.removeEventListener('user-list-reset', handleUserListReset);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
@@ -325,9 +346,15 @@ function App() {
                   <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ptBR}>
                 <BrowserRouter>
                   <Routes>
-                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/login" element={<UnifiedLoginPage />} />
+                    <Route path="/login-old" element={<LoginPage />} />
                     <Route path="/reset-password" element={<PasswordResetPage />} />
                     <Route path="/test-login" element={<TestLoginPage />} />
+                    <Route path="/" element={
+                      UnifiedAuthService.isAuthenticated() ?
+                        <Navigate to="/dashboard" /> :
+                        <Navigate to="/login" />
+                    } />
                     <Route path="/*" element={
                       <AuthCheck>
                         <Box sx={{ display: 'flex' }}>
@@ -350,19 +377,38 @@ function App() {
                             }}
                           >
                             <Routes>
-                              <Route path="/" element={<DashboardPage orders={orders} onOrdersUpdate={setOrders} selectedStatus={selectedStatus} onStatusSelect={handleStatusSelect} clearAllOrders={clearAllOrders} />} />
+                              <Route path="/" element={<DashboardPage orders={orders} onOrdersUpdate={(updatedOrders) => {
+                                setOrders(updatedOrders);
+                                localStorage.setItem('orders', JSON.stringify(updatedOrders));
+                              }} selectedStatus={selectedStatus} onStatusSelect={handleStatusSelect} clearAllOrders={clearAllOrders} />} />
+                              <Route path="/dashboard" element={<DashboardPage orders={orders} onOrdersUpdate={(updatedOrders) => {
+                                setOrders(updatedOrders);
+                                localStorage.setItem('orders', JSON.stringify(updatedOrders));
+                              }} selectedStatus={selectedStatus} onStatusSelect={handleStatusSelect} clearAllOrders={clearAllOrders} />} />
                               <Route path="/reports" element={<ReportsPage orders={orders} />} />
                               <Route path="/advanced-reports" element={<AdvancedReportsPage orders={orders} />} />
                               <Route path="/tracking" element={<TrackingPage />} />
                               <Route path="/duplicates" element={<DuplicateOrdersPage />} />
                               <Route path="/settings" element={<SettingsPage />} />
                               <Route path="/example" element={<ExamplePage />} />
-                              <Route path="/users" element={<UsersPageFull orders={orders} />} />
-                              <Route path="/new-user" element={<NewUserPage />} />
-                              <Route path="/edit-user/:id" element={<EditUserPage />} />
+                              {/* Rotas de usuários */}
+                              <Route path="/users" element={<UnifiedUsersPageWrapper />} />
+                              <Route path="/new-user" element={<UnifiedNewUserPageWrapper />} />
+                              <Route path="/edit-user/:userId" element={<UnifiedEditUserPageWrapper />} />
+
+                              {/* Rotas legadas (manter para compatibilidade) */}
+                              <Route path="/unified/users" element={<UnifiedUsersPageWrapper />} />
+                              <Route path="/unified/new-user" element={<UnifiedNewUserPageWrapper />} />
+                              <Route path="/unified/edit-user/:userId" element={<UnifiedEditUserPageWrapper />} />
+                              <Route path="/users-old" element={<UsersPageFull orders={orders} />} />
+                              <Route path="/edit-user-old/:id" element={<EditUserPage />} />
+                              <Route path="/new-user-old" element={<NewUserPage />} />
                               <Route path="/import" element={<ImportPageNew onImportSuccess={mergeOrders} />} />
                               <Route path="/webhook" element={<WebhookPage />} />
-                              <Route path="/vendedor" element={<VendedorPage orders={orders} onOrdersUpdate={setOrders} />} />
+                              <Route path="/vendedor" element={<VendedorPage orders={orders} onOrdersUpdate={(updatedOrders) => {
+                                setOrders(updatedOrders);
+                                localStorage.setItem('orders', JSON.stringify(updatedOrders));
+                              }} />} />
                               <Route path="/products" element={<ProductsPage />} />
                               <Route path="/create-offers" element={<CreateOffersPage />} />
                               <Route path="/check-orders" element={<CheckOrdersPage />} />
@@ -371,6 +417,9 @@ function App() {
                               <Route path="/restore-data" element={<RestoreDataPage />} />
                               <Route path="/password-diagnostic" element={<PasswordDiagnosticPage />} />
                               <Route path="/correios-api" element={<CorreiosApiManagementPage />} />
+                              <Route path="/zap-config" element={<ZapConfigPage />} />
+                              <Route path="/ranking" element={<VendedorRankingPage />} />
+                              <Route path="/ranking-operador" element={<OperadorRankingPage />} />
                               {/* New Financial Routes */}
                               <Route path="/admin" element={<AdminDashboardPage />} />
                               <Route path="/financeiro/facebook" element={<FacebookAdsPage />} />
@@ -379,6 +428,9 @@ function App() {
                               {/* Nutra Logistics Routes */}
                               <Route path="/nutra" element={<NutraDashboardPage />} />
                               <Route path="/nutra/products" element={<NutraProductsPage />} />
+                              {/* Novas rotas para aprovação e rastreamento */}
+                              <Route path="/approval" element={<ApprovalPage />} />
+                              <Route path="/tracking-management" element={<TrackingManagementPage />} />
                             </Routes>
                           </Box>
                         </Box>

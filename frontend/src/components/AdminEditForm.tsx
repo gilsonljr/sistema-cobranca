@@ -93,8 +93,6 @@ const AdminEditForm: React.FC<AdminEditFormProps> = ({
         'Devolvido Correios',
         'Liberação',
         'Possíveis Duplicados',
-        'Aguardando Aprovação',
-        'Aprovado',
         'Em Trânsito',
         'Entregue'
       ];

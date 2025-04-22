@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Drawer,
   List,
@@ -34,7 +34,7 @@ import CodeIcon from '@mui/icons-material/Code';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CategoryIcon from '@mui/icons-material/Category';
-import AuthService from '../services/AuthService';
+import UnifiedAuthService from '../services/UnifiedAuthService';
 import { Order } from '../types/Order';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLess from '@mui/icons-material/ExpandLess';
@@ -50,6 +50,8 @@ import ScienceIcon from '@mui/icons-material/Science';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import FactoryIcon from '@mui/icons-material/Factory';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import AddIcon from '@mui/icons-material/Add';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
 
 export interface StatusFilter {
@@ -79,20 +81,38 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
   const [adminOpen, setAdminOpen] = useState(false);
   const [nutraOpen, setNutraOpen] = useState(false);
 
+  // State to force re-render when an order status is updated
+  const [statusUpdateTrigger, setStatusUpdateTrigger] = useState(0);
+
   // Verificar o papel do usuário e obter informações adicionais
   useEffect(() => {
-    setIsSeller(AuthService.isSeller());
-    setIsAdmin(AuthService.isAdmin());
-    setIsSupervisor(AuthService.isSupervisor());
-    setIsOperator(AuthService.isCollector());
-
-    // Obter informações do usuário logado para filtrar vendas por vendedor/operador
-    const userInfo = AuthService.getUserInfo();
+    // Obter informações do usuário logado
+    const userInfo = UnifiedAuthService.getUserInfo();
     if (userInfo) {
+      // Definir papéis com base no papel do usuário
+      setIsSeller(userInfo.role === 'seller');
+      setIsAdmin(userInfo.role === 'admin');
+      setIsSupervisor(userInfo.role === 'supervisor');
+      setIsOperator(userInfo.role === 'collector');
+
+      // Definir informações do usuário
       setCurrentUserEmail(userInfo.email);
       setCurrentUserName(userInfo.fullName);
       console.log("Current user:", userInfo.fullName, userInfo.role);
     }
+
+    // Listen for order status updates
+    const handleOrderStatusUpdate = (event: CustomEvent) => {
+      console.log('Received order status update:', event.detail);
+      // Force a re-render of the sidebar
+      setStatusUpdateTrigger(prev => prev + 1);
+    };
+
+    window.addEventListener('order-status-updated', handleOrderStatusUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('order-status-updated', handleOrderStatusUpdate as EventListener);
+    };
   }, []);
 
   // Função para filtrar pedidos baseado no papel do usuário
@@ -105,17 +125,35 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
     // Se for vendedor, mostrar apenas pedidos do próprio vendedor
     if (isSeller) {
       return ordersToFilter.filter(order => {
-        // Filtrar por nome exato ou por email (se o nome do vendedor for o email)
-        return order.vendedor === currentUserName ||
-               order.vendedor === currentUserEmail;
+        // Verificar se o vendedor está definido
+        if (!order.vendedor) return false;
+
+        // Comparar ignorando case e espaços extras
+        const vendedorNormalizado = order.vendedor.toLowerCase().trim();
+        const userNameNormalizado = currentUserName ? currentUserName.toLowerCase().trim() : '';
+        const userEmailNormalizado = currentUserEmail ? currentUserEmail.toLowerCase().trim() : '';
+
+        // Verificar se o nome do vendedor contém o nome do usuário ou vice-versa
+        return vendedorNormalizado.includes(userNameNormalizado) ||
+               userNameNormalizado.includes(vendedorNormalizado) ||
+               vendedorNormalizado.includes(userEmailNormalizado) ||
+               userEmailNormalizado.includes(vendedorNormalizado);
       });
     }
 
     // Se for operador, mostrar apenas pedidos atribuídos a este operador
     if (isOperator) {
       return ordersToFilter.filter(order => {
-        return order.operador === currentUserName ||
-               order.operador === currentUserEmail;
+        if (!order.operador) return false;
+
+        const operadorNormalizado = order.operador.toLowerCase().trim();
+        const userNameNormalizado = currentUserName ? currentUserName.toLowerCase().trim() : '';
+        const userEmailNormalizado = currentUserEmail ? currentUserEmail.toLowerCase().trim() : '';
+
+        return operadorNormalizado.includes(userNameNormalizado) ||
+               userNameNormalizado.includes(operadorNormalizado) ||
+               operadorNormalizado.includes(userEmailNormalizado) ||
+               userEmailNormalizado.includes(operadorNormalizado);
       });
     }
 
@@ -126,56 +164,71 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
   // Filtrar pedidos baseado no papel do usuário antes de contar
   const filteredOrdersByRole = filterOrdersByUserRole(orders);
 
-  const getStatusCount = (status: string) => {
-    return filteredOrdersByRole.filter(order =>
+  // Update the statusItems and adminStatusItems arrays when statusUpdateTrigger changes
+  // so they reflect the current counts
+  const getStatusCount = useCallback((status: string): number => {
+    const count = filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === status.toLowerCase()
     ).length;
-  };
 
-  const getTotalOrders = () => {
+    // Debug log for status counts
+    if (status.toLowerCase() === 'liberação') {
+      console.log(`Debug - Liberação status count: ${count}`);
+      console.log(`Orders with Liberação:`,
+        filteredOrdersByRole.filter(order =>
+          typeof order.situacaoVenda === 'string' &&
+          order.situacaoVenda.toLowerCase() === 'liberação'
+        )
+      );
+    }
+
+    return count;
+  }, [filteredOrdersByRole]);
+
+  const getTotalOrders = useCallback(() => {
     return filteredOrdersByRole.filter(order =>
       !!order.idVenda &&
       (!order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado')
     ).length;
-  };
+  }, [filteredOrdersByRole]);
 
   // Todos os métodos abaixo excluem pedidos com status "Deletado" para garantir
   // que esses pedidos não interfiram em nenhum relatório ou contagem total
   // conforme requisito do cliente.
 
-  const getPendingPayments = () => {
+  const getPendingPayments = useCallback(() => {
     return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'pagamento pendente'
     ).length;
-  };
+  }, [filteredOrdersByRole]);
 
-  const getCompletedOrders = () => {
+  const getCompletedOrders = useCallback(() => {
     return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'completo'
     ).length;
-  };
+  }, [filteredOrdersByRole]);
 
-  const getCanceledOrders = () => {
+  const getCanceledOrders = useCallback(() => {
     return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'cancelado'
     ).length;
-  };
+  }, [filteredOrdersByRole]);
 
-  const getDeletedOrders = () => {
+  const getDeletedOrders = useCallback(() => {
     return filteredOrdersByRole.filter(order =>
       typeof order.situacaoVenda === 'string' &&
       order.situacaoVenda.toLowerCase() === 'deletado'
     ).length;
-  };
+  }, [filteredOrdersByRole]);
 
-  const getReceiveToday = () => {
+  const getReceiveToday = useCallback(() => {
     const today = new Date().toLocaleDateString('pt-BR');
     return filteredOrdersByRole.filter(order => order.dataRecebimento === today).length;
-  };
+  }, [filteredOrdersByRole]);
 
   const statusItems = [
     { text: 'Todos os Pedidos', icon: <ArticleOutlinedIcon />, count: getTotalOrders(), filter: null },
@@ -190,7 +243,7 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
     { text: 'Entrega Falha', icon: <WarningAmberOutlinedIcon sx={{ color: '#F44336' }} />, count: getStatusCount('Entrega Falha'), filter: { field: 'situacaoVenda', value: 'entrega falha' } },
     { text: 'Confirmar Entrega', icon: <ThumbUpAltOutlinedIcon sx={{ color: '#4CAF50' }} />, count: getStatusCount('Confirmar Entrega'), filter: { field: 'situacaoVenda', value: 'confirmar entrega' } },
     { text: 'Devolvido Correios', icon: <KeyboardReturnOutlinedIcon sx={{ color: '#F44336' }} />, count: getStatusCount('Devolvido Correios'), filter: { field: 'situacaoVenda', value: 'devolvido correios' } },
-    { text: 'Liberação', icon: <AccessTimeOutlinedIcon sx={{ color: '#2196F3' }} />, count: getStatusCount('Liberação'), filter: { field: 'situacaoVenda', value: 'liberação' } },
+    { text: 'Liberação', icon: <AccessTimeOutlinedIcon sx={{ color: '#2196F3' }} />, count: getStatusCount('liberação'), filter: { field: 'situacaoVenda', value: 'liberação' } },
     { text: 'Receber Hoje', icon: <CalendarTodayOutlinedIcon sx={{ color: '#2196F3' }} />, count: getReceiveToday(), filter: { field: 'special', value: 'dataRecebimento' } },
     { text: 'Possíveis Duplicados', icon: <ContentCopyOutlinedIcon sx={{ color: '#FF9800' }} />, count: getStatusCount('Possíveis Duplicados'), filter: { field: 'situacaoVenda', value: 'possíveis duplicados' } },
   ];
@@ -222,12 +275,19 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
       console.log(`Contagem para ${filter.value}: ${count}`);
     }
 
-    // Atualizar o filtro selecionado
+    // Atualizar o filtro selecionado (mesmo se count for 0)
     onStatusSelect(filter);
+
+    // Forçar atualização se estivermos na dashboard (vai atualizar a lista sem navegar)
+    const event = new CustomEvent('update-dashboard-filter', { detail: filter });
+    window.dispatchEvent(event);
 
     // Se não estiver na dashboard, navegar para lá
     if (location.pathname !== '/') {
+      console.log(`Navegando para dashboard com filtro: ${filter?.value}`);
       navigate('/');
+    } else {
+      console.log('Já estamos na dashboard, apenas atualizando o filtro');
     }
   };
 
@@ -246,6 +306,17 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
 
   const handleNutraClick = () => {
     setNutraOpen(!nutraOpen);
+  };
+
+  // Handler para abrir o diálogo de criação de pedido
+  const handleOpenNewOrderDialog = () => {
+    if (location.pathname === '/vendedor') {
+      // If already on the vendedor page, dispatch a custom event
+      window.dispatchEvent(new CustomEvent('open-new-order-dialog'));
+    } else {
+      // Otherwise navigate to the vendedor page with state
+      navigate('/vendedor', { state: { openNewOrderDialog: true } });
+    }
   };
 
   // Common styles for list items
@@ -303,53 +374,95 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
                   </ListItemIcon>
                   <ListItemText primary="Home Dashboard" />
                 </ListItemButton>
+
+                <ListItemButton
+                  component={Link}
+                  to="/users"
+                  selected={location.pathname === '/users'}
+                  sx={listItemStyle}
+                >
+                  <ListItemIcon>
+                    <AdminPanelSettingsIcon sx={{ color: '#3f51b5' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Usuários" />
+                </ListItemButton>
+
+                <ListItemButton
+                  component={Link}
+                  to="/products"
+                  selected={location.pathname === '/products'}
+                  sx={listItemStyle}
+                >
+                  <ListItemIcon>
+                    <CategoryIcon sx={{ color: '#9C27B0' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Produtos e Ofertas" />
+                </ListItemButton>
+
+                <ListItemButton
+                  component={Link}
+                  to="/zap-config"
+                  selected={location.pathname === '/zap-config'}
+                  sx={listItemStyle}
+                >
+                  <ListItemIcon>
+                    <WhatsAppIcon sx={{ color: '#25D366' }} />
+                  </ListItemIcon>
+                  <ListItemText primary="Config. WhatsApp" />
+                </ListItemButton>
               </List>
             </Collapse>
             <Divider />
           </>
         )}
 
-        {/* Operação Vendas Section */}
-        <ListItem button onClick={handleOperacaoClick} sx={listItemStyle}>
-          <ListItemIcon>
-            <StorefrontIcon sx={{ color: '#2196F3' }} />
-          </ListItemIcon>
-          <ListItemText primary="Operação Vendas" />
-          {operacaoOpen ? <ExpandLess /> : <ExpandMore />}
-        </ListItem>
+        {/* Links diretos para vendedores - Sem dropdown */}
+        <>
+          <ListItem
+            button
+            component={Link}
+            to="/"
+            selected={location.pathname === '/'}
+            sx={listItemStyle}
+          >
+            <ListItemIcon>
+              <DashboardIcon sx={{ color: '#03A9F4' }} />
+            </ListItemIcon>
+            <ListItemText primary="Dashboard" />
+          </ListItem>
 
-        <Collapse in={operacaoOpen} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItem
-              button
-              component={Link}
-              to="/"
-              selected={location.pathname === '/'}
-              sx={{ ...listItemStyle, pl: 4 }}
-            >
-              <ListItemIcon>
-                <DashboardIcon sx={{ color: '#03A9F4' }} />
-              </ListItemIcon>
-              <ListItemText primary="Dashboard" />
-            </ListItem>
-
-            {/* Mostrar link para página de vendedor apenas para vendedores */}
-            {isSeller && (
+          {isSeller && (
+            <>
               <ListItem
                 button
                 component={Link}
                 to="/vendedor"
                 selected={location.pathname === '/vendedor'}
-                sx={{ ...listItemStyle, pl: 4 }}
+                sx={listItemStyle}
               >
                 <ListItemIcon>
                   <ShoppingCartIcon sx={{ color: '#F44336' }} />
                 </ListItemIcon>
                 <ListItemText primary="Meus Pedidos" />
               </ListItem>
-            )}
-          </List>
-        </Collapse>
+
+              <ListItem
+                button
+                onClick={handleOpenNewOrderDialog}
+                sx={listItemStyle}
+              >
+                <ListItemIcon>
+                  <AddIcon sx={{ color: '#4CAF50' }} />
+                </ListItemIcon>
+                <ListItemText primary="Criar Pedido" />
+              </ListItem>
+            </>
+          )}
+
+          {/* Ranking removido da barra lateral e movido para a barra superior */}
+
+          <Divider sx={{ my: 1 }} />
+        </>
 
         {/* Financeiro Section */}
         {(isAdmin || isSupervisor) && (
@@ -410,6 +523,20 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
         {/* Mostrar link para pedidos duplicados apenas para admin e supervisor */}
         {(isAdmin || isSupervisor) && (
           <>
+            <ListItem button component={Link} to="/approval" selected={location.pathname === '/approval'} sx={listItemStyle}>
+              <ListItemIcon>
+                <ThumbUpAltOutlinedIcon sx={{ color: '#4CAF50' }} />
+              </ListItemIcon>
+              <ListItemText primary="Aprovar Pedidos" />
+            </ListItem>
+
+            <ListItem button component={Link} to="/tracking-management" selected={location.pathname === '/tracking-management'} sx={listItemStyle}>
+              <ListItemIcon>
+                <LocalShippingOutlinedIcon sx={{ color: '#2196F3' }} />
+              </ListItemIcon>
+              <ListItemText primary="Gerenciar Rastreio" />
+            </ListItem>
+
             <ListItem button component={Link} to="/duplicates" selected={location.pathname === '/duplicates'} sx={listItemStyle}>
               <ListItemIcon>
                 <ContentCopyIcon sx={{ color: '#FF9800' }} />
@@ -417,18 +544,7 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
               <ListItemText primary="Pedidos Duplicados" />
             </ListItem>
 
-            <ListItem
-              button
-              component={Link}
-              to="/products"
-              selected={location.pathname === '/products'}
-              sx={listItemStyle}
-            >
-              <ListItemIcon>
-                <CategoryIcon sx={{ color: '#9C27B0' }} />
-              </ListItemIcon>
-              <ListItemText primary="Produtos e Ofertas" />
-            </ListItem>
+
 
             {/* Nutra Logistics Section */}
             <ListItem button onClick={handleNutraClick} sx={listItemStyle}>
@@ -470,6 +586,11 @@ const Sidebar: React.FC<SidebarProps> = ({ orders, onStatusSelect, selectedStatu
             </Collapse>
           </>
         )}
+
+        {/* Basic Reports Links - modified to show only Advanced Reports */}
+        <>
+          {/* Relatórios Avançados removido conforme solicitado */}
+        </>
       </List>
 
       <Divider sx={{ my: 2 }} />

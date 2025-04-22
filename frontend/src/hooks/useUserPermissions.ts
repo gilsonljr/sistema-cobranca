@@ -19,11 +19,11 @@ export const useUserPermissions = () => {
     setIsSupervisor(AuthService.isSupervisor());
     setIsCollector(AuthService.isCollector());
     setIsSeller(AuthService.isSeller());
-    
+
     // Obter informações do usuário
     const userInfo = AuthService.getUserInfo();
     if (userInfo) {
-      setCurrentUserName(userInfo.fullName);
+      setCurrentUserName(userInfo.full_name);
       setCurrentUserEmail(userInfo.email);
     }
   }, []);
@@ -37,17 +37,17 @@ export const useUserPermissions = () => {
   const canViewOrder = (vendedor?: string, operador?: string): boolean => {
     // Admins e supervisores podem ver todos os pedidos
     if (isAdmin || isSupervisor) return true;
-    
+
     // Vendedores podem ver apenas seus próprios pedidos
     if (isSeller) {
       return vendedor === currentUserName || vendedor === currentUserEmail;
     }
-    
+
     // Operadores podem ver apenas pedidos atribuídos a eles
     if (isCollector) {
       return operador === currentUserName || operador === currentUserEmail;
     }
-    
+
     return false;
   };
 
@@ -83,7 +83,7 @@ export const useUserPermissions = () => {
           return false;
         }
       }
-      
+
       // Filtrar com base no papel do usuário
       return canViewOrder(order.vendedor, order.operador);
     });
@@ -103,4 +103,4 @@ export const useUserPermissions = () => {
   };
 };
 
-export default useUserPermissions; 
+export default useUserPermissions;

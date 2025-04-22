@@ -30,6 +30,8 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AuthService from '../services/AuthService';
 import UserSyncService from '../services/UserSyncService';
 import { useUsers } from '../contexts/UserContext';
+import { User, UserInput } from '../types/User';
+import { convertToUserManagerFormat } from '../utils/userUtils';
 
 interface UserInfo {
   id: number;
@@ -39,137 +41,79 @@ interface UserInfo {
 }
 
 const ProfilePage: React.FC = () => {
-  const { getUserByEmail, updateUser } = useUsers();
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { currentUser, updateUser } = useUsers();
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    fullName: '',
+  const [formData, setFormData] = useState<UserInput>({
     email: '',
+    full_name: '',
+    role: 'collector',
+    is_active: true
   });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Carregar informações do usuário
-    const storedUserInfo = localStorage.getItem('userInfo');
-    if (storedUserInfo) {
-      const parsedUserInfo = JSON.parse(storedUserInfo);
-      setUserInfo(parsedUserInfo);
-      setIsAdmin(parsedUserInfo.role === 'admin');
-      setEditForm({
-        fullName: parsedUserInfo.fullName,
-        email: parsedUserInfo.email,
+    if (currentUser) {
+      setFormData({
+        email: currentUser.email,
+        full_name: currentUser.full_name,
+        role: currentUser.role,
+        is_active: currentUser.is_active
       });
     }
-  }, []);
+  }, [currentUser]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (!currentUser) {
+        throw new Error('No user logged in');
+      }
+
+      // Update user in UserStore
+      await updateUser(currentUser.id, formData);
+
+      // Convert to UserManager format for sync
+      const userManagerFormat = convertToUserManagerFormat({
+        ...currentUser,
+        ...formData
+      });
+
+      // Update logged user
+      UserSyncService.updateLoggedUser(userManagerFormat);
+
+      setIsEditing(false);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEditClick = () => {
-    if (!isAdmin) {
-      setError('Apenas administradores podem editar informações de usuário.');
-      return;
-    }
     setIsEditing(true);
     setError('');
-    setSuccess('');
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    if (userInfo) {
-      setEditForm({
-        fullName: userInfo.fullName,
-        email: userInfo.email,
+    if (currentUser) {
+      setFormData({
+        email: currentUser.email,
+        full_name: currentUser.full_name,
+        role: currentUser.role,
+        is_active: currentUser.is_active
       });
     }
     setError('');
-    setSuccess('');
-  };
-
-  const handleSaveEdit = () => {
-    // Validação básica
-    if (!editForm.fullName.trim() || !editForm.email.trim()) {
-      setError('Todos os campos são obrigatórios.');
-      return;
-    }
-
-    if (!userInfo) {
-      setError('Informações do usuário não disponíveis. Por favor, faça login novamente.');
-      return;
-    }
-
-    const oldEmail = userInfo.email;
-    const newEmail = editForm.email;
-    
-    // Atualizar userInfo no state local e localStorage
-    const updatedUserInfo = {
-      ...userInfo,
-      fullName: editForm.fullName,
-      email: editForm.email,
-    };
-    
-    // 1. Atualizar userInfo no localStorage
-    localStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
-    setUserInfo(updatedUserInfo);
-    
-    // 2. Atualizar no contexto de usuários
-    const contextUser = getUserByEmail(oldEmail);
-    if (contextUser) {
-      const updatedContextUser = {
-        ...contextUser,
-        nome: editForm.fullName,
-        email: editForm.email
-      };
-      
-      // Atualizar através do contexto (isso irá acionar todas as sincronizações)
-      updateUser(updatedContextUser);
-    } else {
-      // Se não encontrar no contexto, fazer a sincronização direta
-      UserSyncService.updateLoggedUser({
-        id: userInfo.id,
-        nome: editForm.fullName, 
-        email: editForm.email,
-        papeis: getRoleToArray(userInfo.role),
-        permissoes: getPermissionsFromRole(userInfo.role),
-        ativo: true
-      });
-    }
-    
-    setIsEditing(false);
-    setSuccess('Informações atualizadas com sucesso em todos os sistemas!');
-  };
-
-  // Função para converter role para array de papéis
-  const getRoleToArray = (role: string): string[] => {
-    switch (role) {
-      case 'admin': return ['admin'];
-      case 'supervisor': return ['supervisor'];
-      case 'collector': return ['collector', 'operador'];
-      case 'seller': return ['seller', 'vendedor'];
-      default: return ['user'];
-    }
-  };
-  
-  // Função para obter permissões de acordo com o papel
-  const getPermissionsFromRole = (role: string): string[] => {
-    switch (role) {
-      case 'admin':
-        return ['criar_usuario', 'editar_usuario', 'excluir_usuario', 'ver_relatorios', 
-                'editar_configuracoes', 'ver_todos_pedidos', 'editar_pedidos'];
-      case 'supervisor':
-        return ['ver_relatorios', 'ver_todos_pedidos', 'editar_pedidos'];
-      case 'collector':
-        return ['ver_pedidos_atribuidos', 'editar_pedidos_atribuidos'];
-      case 'seller':
-        return ['ver_pedidos_proprios', 'criar_pedidos'];
-      default:
-        return [];
-    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setEditForm(prev => ({
+    setFormData(prev => ({
       ...prev,
       [name]: value,
     }));
@@ -205,7 +149,7 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  if (!userInfo) {
+  if (!currentUser) {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="error">
@@ -234,12 +178,6 @@ const ProfilePage: React.FC = () => {
         </Alert>
       )}
 
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          {success}
-        </Alert>
-      )}
-
       <Grid container spacing={3}>
         {/* Cartão de perfil */}
         <Grid item xs={12} md={4}>
@@ -265,13 +203,13 @@ const ProfilePage: React.FC = () => {
                   mb: 2
                 }}
               >
-                {userInfo.fullName.charAt(0).toUpperCase()}
+                {currentUser.full_name.charAt(0).toUpperCase()}
               </Avatar>
               <Typography variant="h5" sx={{ fontWeight: 500 }}>
-                {userInfo.fullName}
+                {currentUser.full_name}
               </Typography>
               <Chip
-                label={getRoleName(userInfo.role)}
+                label={getRoleName(currentUser.role)}
                 color="default"
                 sx={{
                   bgcolor: 'rgba(255,255,255,0.2)',
@@ -287,24 +225,24 @@ const ProfilePage: React.FC = () => {
                   <EmailIcon sx={{ mr: 2, color: 'text.secondary' }} />
                   <ListItemText
                     primary="Email"
-                    secondary={userInfo.email}
+                    secondary={currentUser.email}
                   />
                 </ListItem>
                 <ListItem>
                   <BadgeIcon sx={{ mr: 2, color: 'text.secondary' }} />
                   <ListItemText
                     primary="ID do Usuário"
-                    secondary={userInfo.id}
+                    secondary={currentUser.id}
                   />
                 </ListItem>
                 <ListItem>
-                  {getRoleIcon(userInfo.role)}
+                  {getRoleIcon(currentUser.role)}
                   <Box sx={{ ml: 2 }}>
                     <Typography variant="body2" color="text.secondary">
                       Função
                     </Typography>
                     <Typography variant="body1" fontWeight={500}>
-                      {getRoleName(userInfo.role)}
+                      {getRoleName(currentUser.role)}
                     </Typography>
                   </Box>
                 </ListItem>
@@ -321,12 +259,11 @@ const ProfilePage: React.FC = () => {
                 Informações do Usuário
               </Typography>
               {!isEditing ? (
-                <Tooltip title={isAdmin ? "Editar informações" : "Apenas administradores podem editar"}>
+                <Tooltip title="Editar informações">
                   <span>
                     <IconButton
                       color="primary"
                       onClick={handleEditClick}
-                      disabled={!isAdmin}
                     >
                       <EditIcon />
                     </IconButton>
@@ -347,7 +284,7 @@ const ProfilePage: React.FC = () => {
                     variant="contained"
                     color="primary"
                     size="small"
-                    onClick={handleSaveEdit}
+                    onClick={handleSubmit}
                   >
                     Salvar
                   </Button>
@@ -363,8 +300,8 @@ const ProfilePage: React.FC = () => {
                   <TextField
                     fullWidth
                     label="Nome Completo"
-                    name="fullName"
-                    value={editForm.fullName}
+                    name="full_name"
+                    value={formData.full_name}
                     onChange={handleInputChange}
                     variant="outlined"
                   />
@@ -374,7 +311,7 @@ const ProfilePage: React.FC = () => {
                     fullWidth
                     label="Email"
                     name="email"
-                    value={editForm.email}
+                    value={formData.email}
                     onChange={handleInputChange}
                     variant="outlined"
                   />
@@ -385,7 +322,7 @@ const ProfilePage: React.FC = () => {
                 <ListItem>
                   <ListItemText
                     primary="Nome Completo"
-                    secondary={userInfo.fullName}
+                    secondary={currentUser.full_name}
                     primaryTypographyProps={{ color: 'text.secondary', variant: 'body2' }}
                     secondaryTypographyProps={{ color: 'text.primary', variant: 'body1', fontWeight: 500 }}
                   />
@@ -394,7 +331,7 @@ const ProfilePage: React.FC = () => {
                 <ListItem>
                   <ListItemText
                     primary="Email"
-                    secondary={userInfo.email}
+                    secondary={currentUser.email}
                     primaryTypographyProps={{ color: 'text.secondary', variant: 'body2' }}
                     secondaryTypographyProps={{ color: 'text.primary', variant: 'body1', fontWeight: 500 }}
                   />
@@ -403,7 +340,7 @@ const ProfilePage: React.FC = () => {
                 <ListItem>
                   <ListItemText
                     primary="Função"
-                    secondary={getRoleName(userInfo.role)}
+                    secondary={getRoleName(currentUser.role)}
                     primaryTypographyProps={{ color: 'text.secondary', variant: 'body2' }}
                     secondaryTypographyProps={{ color: 'text.primary', variant: 'body1', fontWeight: 500 }}
                   />

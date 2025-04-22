@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Duplicate Orders</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+    }
+    .btn {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 15px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .btn-warning {
+      background-color: #ff9800;
+    }
+    .btn-danger {
+      background-color: #f44336;
+    }
+    #results {
+      background-color: #f5f5f5;
+      border-left: 4px solid #2196F3;
+      padding: 10px;
+      margin-top: 20px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Debug Duplicate Orders</h1>
+
+  <div class="card">
+    <h2>Add Test Duplicate Orders</h2>
+    <p>Click the button below to add some test duplicate orders to the localStorage.</p>
+    <button id="addDuplicates" class="btn">Add Test Duplicate Orders</button>
+  </div>
+
+  <div class="card">
+    <h2>View localStorage Orders</h2>
+    <p>Click to check the current orders in localStorage:</p>
+    <button id="viewOrders" class="btn">View Orders</button>
+    <button id="clearOrders" class="btn btn-danger">Clear All Orders</button>
+  </div>
+
+  <div class="card">
+    <h2>Test Duplicates Page</h2>
+    <p>After adding the test orders, visit the duplicates page to see them:</p>
+    <a href="/duplicates" class="btn" target="_blank">Go to Duplicates Page</a>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    // Function to display results
+    function showResult(message) {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.textContent = message;
+    }
+
+    // Add duplicates button
+    document.getElementById('addDuplicates').addEventListener('click', () => {
+      try {
+        // Load the debug script dynamically
+        const script = document.createElement('script');
+        script.src = '/debug-duplicate-orders.js';
+        script.onload = () => {
+          showResult('Test duplicate orders added successfully!\nCheck the browser console for details.');
+        };
+        script.onerror = (err) => {
+          showResult(`Error loading script: ${err.message}\n\nMake sure you have the debug-duplicate-orders.js file in the public folder.`);
+        };
+        document.body.appendChild(script);
+      } catch (error) {
+        showResult(`Error: ${error.message}`);
+      }
+    });
+
+    // View orders button
+    document.getElementById('viewOrders').addEventListener('click', () => {
+      try {
+        const savedOrders = localStorage.getItem('orders');
+        const orders = savedOrders ? JSON.parse(savedOrders) : [];
+        showResult(`Total orders in localStorage: ${orders.length}\n\nFirst 3 orders:\n${JSON.stringify(orders.slice(0, 3), null, 2)}`);
+      } catch (error) {
+        showResult(`Error: ${error.message}`);
+      }
+    });
+
+    // Clear orders button
+    document.getElementById('clearOrders').addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear all orders? This cannot be undone.')) {
+        localStorage.removeItem('orders');
+        showResult('All orders have been removed from localStorage.');
+      }
+    });
+  </script>
+</body>
+</html> 

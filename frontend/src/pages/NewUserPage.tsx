@@ -25,20 +25,21 @@ import {
 import SaveIcon from '@mui/icons-material/Save';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
-import { useUsers, User } from '../contexts/UserContext';
+import { useUsers } from '../contexts/UserContext';
+import { UserInput } from '../types/User';
 
 const NewUserPage: React.FC = () => {
   const navigate = useNavigate();
-  const { users, setUsers } = useUsers();
-  const [formData, setFormData] = useState({
-    nome: '',
+  const { addUser } = useUsers();
+  const [formData, setFormData] = useState<UserInput>({
     email: '',
-    senha: '',
-    confirmarSenha: '',
-    perfil: '',
-    permissoes: [] as string[],
-    ativo: true,
+    full_name: '',
+    role: 'collector',
+    is_active: true,
+    password: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Lista de permissões disponíveis
   const permissoesDisponiveis = [
@@ -134,7 +135,7 @@ const NewUserPage: React.FC = () => {
     const newErrors = { ...errors };
 
     // Validar nome
-    if (!formData.nome.trim()) {
+    if (!formData.nome || !formData.nome.trim()) {
       newErrors.nome = 'Nome é obrigatório';
       valid = false;
     }
@@ -170,7 +171,7 @@ const NewUserPage: React.FC = () => {
     }
 
     // Validar permissões
-    if (formData.permissoes.length === 0) {
+    if (!formData.permissoes || formData.permissoes.length === 0) {
       newErrors.permissoes = 'Selecione pelo menos uma permissão';
       valid = false;
     }
@@ -179,112 +180,18 @@ const NewUserPage: React.FC = () => {
     return valid;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-    if (validateForm()) {
-      // Criar novo ID para o usuário
-      const newId = Date.now();
-
-      // Mapear perfil para papéis
-      let papeis: string[] = [];
-      switch(formData.perfil) {
-        case 'Administrador':
-          papeis = ['admin'];
-          break;
-        case 'Supervisor':
-          papeis = ['supervisor'];
-          break;
-        case 'Operador':
-          papeis = ['collector'];
-          break;
-        case 'Vendedor':
-          papeis = ['seller'];
-          break;
-        default:
-          papeis = ['user'];
-      }
-
-      // Criar novo usuário para o contexto
-      const newUser: User = {
-        id: newId,
-        nome: formData.nome,
-        email: formData.email,
-        papeis: papeis,
-        permissoes: formData.permissoes,
-        ativo: formData.ativo
-      };
-
-      // 1. Adicionar ao contexto de usuários
-      setUsers([...users, newUser]);
-
-      // 2. Sincronizar em todos os locais de armazenamento
-
-      // Adicionar em users (localStorage)
-      const usersStr = localStorage.getItem('users');
-      const storedUsers = usersStr ? JSON.parse(usersStr) : [];
-      storedUsers.push(newUser);
-      localStorage.setItem('users', JSON.stringify(storedUsers));
-
-      // Adicionar em default_users
-      const defaultUsersStr = localStorage.getItem('default_users');
-      const defaultUsers = defaultUsersStr ? JSON.parse(defaultUsersStr) : {};
-
-      // Mapear papel para role
-      let role = 'user';
-      if (papeis.includes('admin')) role = 'admin';
-      else if (papeis.includes('supervisor')) role = 'supervisor';
-      else if (papeis.includes('collector')) role = 'collector';
-      else if (papeis.includes('seller')) role = 'seller';
-
-      defaultUsers[formData.email] = {
-        id: newId,
-        email: formData.email,
-        fullName: formData.nome,
-        role: role,
-        password: formData.senha
-      };
-      localStorage.setItem('default_users', JSON.stringify(defaultUsers));
-
-      // Adicionar em user_passwords
-      if (formData.senha) {
-        const passwordsStr = localStorage.getItem('user_passwords');
-        const passwords = passwordsStr ? JSON.parse(passwordsStr) : {};
-        passwords[formData.email] = formData.senha;
-        localStorage.setItem('user_passwords', JSON.stringify(passwords));
-      }
-
-      // Adicionar em mockUsers
-      const mockUsersStr = localStorage.getItem('mockUsers');
-      const mockUsers = mockUsersStr ? JSON.parse(mockUsersStr) : [];
-      mockUsers.push({
-        id: newId,
-        nome: formData.nome,
-        email: formData.email,
-        perfil: formData.perfil,
-        ativo: formData.ativo
-      });
-      localStorage.setItem('mockUsers', JSON.stringify(mockUsers));
-
-      console.log('Usuário criado e sincronizado em todos os sistemas:', formData);
-
-      // Mostrar mensagem de sucesso
-      setSnackbar({
-        open: true,
-        message: 'Usuário criado com sucesso em todos os sistemas!',
-        severity: 'success',
-      });
-
-      // Redirecionar após 2 segundos
-      setTimeout(() => {
-        navigate('/users');
-      }, 2000);
-    } else {
-      setSnackbar({
-        open: true,
-        message: 'Por favor, corrija os erros no formulário.',
-        severity: 'error',
-      });
+    try {
+      await addUser(formData);
+      navigate('/users');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create user');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -464,7 +371,7 @@ const NewUserPage: React.FC = () => {
               >
                 {permissoesDisponiveis.map((permissao) => (
                   <MenuItem key={permissao.id} value={permissao.id}>
-                    <Checkbox checked={formData.permissoes.indexOf(permissao.id) > -1} />
+                    <Checkbox checked={formData.permissoes ? formData.permissoes.indexOf(permissao.id) > -1 : false} />
                     <ListItemText primary={permissao.nome} />
                   </MenuItem>
                 ))}

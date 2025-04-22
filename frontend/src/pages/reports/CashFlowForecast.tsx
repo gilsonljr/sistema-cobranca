@@ -15,8 +15,8 @@ import { Order } from '../../types/Order';
 
 interface CashFlowForecastProps {
   orders: Order[];
-  startDate?: Date;
-  endDate?: Date;
+  startDate?: Date | null;
+  endDate?: Date | null;
 }
 
 const CashFlowForecast: React.FC<CashFlowForecastProps> = ({ orders, startDate, endDate }) => {

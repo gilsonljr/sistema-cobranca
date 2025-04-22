@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executar Limpeza de Usuários</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .danger {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button.danger {
+            background-color: #dc3545;
+            border-left: none;
+            padding: 10px 15px;
+        }
+        button.success {
+            background-color: #28a745;
+            border-left: none;
+            padding: 10px 15px;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .log-container {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-entry.info {
+            color: #17a2b8;
+        }
+        .log-entry.success {
+            color: #28a745;
+        }
+        .log-entry.error {
+            color: #dc3545;
+        }
+        .log-entry.warning {
+            color: #ffc107;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Executar Limpeza de Usuários</h1>
+        
+        <div class="danger">
+            <h2>⚠️ ATENÇÃO: OPERAÇÃO CRÍTICA</h2>
+            <p>Esta ferramenta irá <strong>REMOVER TODOS</strong> os usuários do sistema, exceto o usuário Admin.</p>
+            <p>Esta ação é <strong>IRREVERSÍVEL</strong> e afetará todas as áreas do sistema.</p>
+        </div>
+        
+        <div class="info">
+            <h3>O que esta ferramenta faz:</h3>
+            <ul>
+                <li>Executa um script JavaScript diretamente para limpar todos os usuários</li>
+                <li>Mantém apenas o usuário Admin com todas as permissões</li>
+                <li>Limpa completamente todas as áreas de armazenamento de usuários</li>
+                <li>Força a atualização de todas as páginas que exibem usuários</li>
+            </ul>
+        </div>
+        
+        <div class="actions">
+            <button id="btn-execute" class="danger">Executar Limpeza de Usuários</button>
+            <button id="btn-go-back" onclick="window.history.back()">Voltar</button>
+            <button id="btn-go-home" onclick="window.location.href='/'">Ir para Home</button>
+        </div>
+    </div>
+    
+    <div id="log-container" class="log-container">
+        <div class="log-entry info">Aguardando ação...</div>
+    </div>
+    
+    <script>
+        // Elementos da UI
+        const btnExecute = document.getElementById('btn-execute');
+        const btnGoBack = document.getElementById('btn-go-back');
+        const btnGoHome = document.getElementById('btn-go-home');
+        const logContainer = document.getElementById('log-container');
+        
+        // Função para adicionar log
+        function addLog(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = message;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Função para executar o script de limpeza
+        function executeCleanup() {
+            try {
+                // Confirmar antes de executar
+                if (!confirm('ATENÇÃO: Esta ação irá REMOVER TODOS os usuários do sistema, exceto o usuário Admin. Esta ação NÃO pode ser desfeita. Deseja continuar?')) {
+                    addLog('Operação cancelada pelo usuário.', 'info');
+                    return;
+                }
+                
+                // Pedir confirmação adicional
+                if (!confirm('Confirme novamente: Todos os usuários serão REMOVIDOS. Apenas o Admin permanecerá. Tem certeza absoluta?')) {
+                    addLog('Operação cancelada na confirmação secundária.', 'info');
+                    return;
+                }
+                
+                addLog('Iniciando execução do script de limpeza...', 'info');
+                
+                // Criar e adicionar o script
+                const script = document.createElement('script');
+                script.src = 'console-clear-users.js';
+                script.onload = function() {
+                    addLog('Script carregado e executado com sucesso!', 'success');
+                    addLog('Todos os usuários foram removidos, exceto o Admin.', 'success');
+                    addLog('A página será recarregada em 3 segundos...', 'info');
+                };
+                script.onerror = function() {
+                    addLog('Erro ao carregar o script de limpeza!', 'error');
+                };
+                
+                document.body.appendChild(script);
+                
+            } catch (error) {
+                addLog(`Erro durante a execução: ${error.message}`, 'error');
+                console.error('Erro ao executar limpeza:', error);
+            }
+        }
+        
+        // Adicionar event listeners
+        btnExecute.addEventListener('click', executeCleanup);
+        
+        // Mostrar mensagem inicial
+        addLog('Ferramenta de execução de limpeza de usuários carregada.', 'info');
+        addLog('Esta ferramenta permite executar um script JavaScript para limpar todos os usuários do sistema, mantendo apenas o Admin.', 'info');
+        addLog('Use o botão "Executar Limpeza de Usuários" para iniciar o processo.', 'warning');
+    </script>
+</body>
+</html>

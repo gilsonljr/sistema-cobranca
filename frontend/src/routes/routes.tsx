@@ -2,6 +2,7 @@ import React, { Suspense, ReactNode } from 'react';
 import { Navigate, RouteObject } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import AuthService from '../services/AuthService';
+import { UserRole } from '../types/User';
 
 // Import pages directly for now (we'll implement lazy loading later)
 import LoginPage from '../pages/LoginPage';
@@ -31,7 +32,7 @@ const LoadingFallback = () => (
 // Auth guard component
 interface AuthGuardProps {
   children: ReactNode;
-  requiredRole?: 'admin' | 'supervisor' | 'collector' | 'seller';
+  requiredRole?: UserRole | UserRole[];
 }
 
 const AuthGuard: React.FC<AuthGuardProps> = ({ children, requiredRole }) => {
@@ -42,12 +43,7 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, requiredRole }) => {
   }
 
   if (requiredRole) {
-    const hasRequiredRole =
-      (requiredRole === 'admin' && AuthService.isAdmin()) ||
-      (requiredRole === 'supervisor' && AuthService.isSupervisor()) ||
-      (requiredRole === 'collector' && AuthService.isCollector()) ||
-      (requiredRole === 'seller' && AuthService.isSeller());
-
+    const hasRequiredRole = AuthService.hasRole(requiredRole);
     if (!hasRequiredRole) {
       return <Navigate to="/" />;
     }
@@ -98,7 +94,7 @@ export const routes: RouteObject[] = [
   {
     path: '/reports',
     element: (
-      <AuthGuard requiredRole="supervisor">
+      <AuthGuard requiredRole={['admin', 'supervisor']}>
         <ReportsPage orders={mockOrders} />
       </AuthGuard>
     ),
@@ -114,7 +110,7 @@ export const routes: RouteObject[] = [
   {
     path: '/duplicates',
     element: (
-      <AuthGuard requiredRole="supervisor">
+      <AuthGuard requiredRole={['admin', 'supervisor']}>
         <DuplicateOrdersPage />
       </AuthGuard>
     ),

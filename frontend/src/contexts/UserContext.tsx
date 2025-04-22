@@ -1,132 +1,168 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import UserSyncService from '../services/UserSyncService';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, UserInput, UserRole } from '../types/User';
+import UserStore, { UserError } from '../services/UserStore';
+import AuthService from '../services/AuthService';
 
-// Interface para o tipo de usuário
-export interface User {
-  id: number;
-  nome: string;
-  email: string;
-  papeis: string[];
-  permissoes: string[];
-  ativo: boolean;
-}
+// Re-export the User type
+export type { User };
 
-// Interface para o contexto
 interface UserContextType {
   users: User[];
-  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  currentUser: User | null;
+  loading: boolean;
+  error: string | null;
+  addUser: (userInput: UserInput) => Promise<User>;
+  updateUser: (userId: number, userInput: UserInput) => Promise<User> | Promise<User>;
+  deleteUser: (userId: number) => Promise<void>;
+  resetToAdmin: () => Promise<void>;
+  hasRole: (role: UserRole | UserRole[]) => boolean;
+  isAdmin: () => boolean;
+  isSupervisor: () => boolean;
+  isCollector: () => boolean;
+  isSeller: () => boolean;
   getUserById: (id: number) => User | undefined;
-  getUserByEmail: (email: string) => User | undefined;
-  updateUser: (updatedUser: User) => void;
-  addUser: (newUser: User) => void;
-  deleteUser: (userId: number) => void;
+  getUserByEmail?: (email: string) => User | undefined;
 }
 
-// Dados iniciais de usuários
-const initialUsers: User[] = [
-  {
-    id: 1,
-    nome: 'Admin',
-    email: 'admin@sistema.com',
-    papeis: ['admin'],
-    permissoes: ['criar_usuario', 'editar_usuario', 'excluir_usuario', 'ver_relatorios', 'editar_configuracoes', 'ver_todos_pedidos', 'editar_pedidos'],
-    ativo: true
-  },
-  {
-    id: 8,
-    nome: 'Ricardo Mendes',
-    email: 'ricardo@wolf.com',
-    papeis: ['supervisor'],
-    permissoes: ['ver_relatorios', 'ver_todos_pedidos', 'editar_pedidos'],
-    ativo: true
-  },
-  {
-    id: 9,
-    nome: 'Fernanda Lima',
-    email: 'fernanda@wolf.com',
-    papeis: ['supervisor'],
-    permissoes: ['ver_relatorios', 'ver_todos_pedidos', 'editar_pedidos'],
-    ativo: true
-  }
-];
-
-// Criar o contexto
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-// Props do provider
-interface UserProviderProps {
-  children: ReactNode;
-}
+export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-// Provider
-export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
-  // Inicializar usuários a partir do localStorage ou usar valores padrão
-  const [users, setUsers] = useState<User[]>(() => {
-    const storedUsers = localStorage.getItem('users');
-    return storedUsers ? JSON.parse(storedUsers) : initialUsers;
-  });
+  useEffect(() => {
+    const userStore = UserStore.getInstance();
 
-  // Função para obter usuário por ID
+    // Load initial data
+    setUsers(userStore.getUsers());
+    setCurrentUser(AuthService.getCurrentUser());
+    setLoading(false);
+
+    // Set up event listeners
+    const handleUsersUpdated = (updatedUsers: User[]) => {
+      setUsers(updatedUsers);
+    };
+
+    userStore.addEventListener(handleUsersUpdated);
+
+    return () => {
+      userStore.removeEventListener(handleUsersUpdated);
+    };
+  }, []);
+
+  const addUser = async (userInput: UserInput): Promise<User> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const userStore = UserStore.getInstance();
+      const newUser = userStore.addUser(userInput);
+      return newUser;
+    } catch (error) {
+      setError(error instanceof UserError ? error.message : 'Failed to add user');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateUser = async (userId: number, userInput: UserInput): Promise<User> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const userStore = UserStore.getInstance();
+      const updatedUser = userStore.updateUser(userId, userInput);
+      return updatedUser;
+    } catch (error) {
+      setError(error instanceof UserError ? error.message : 'Failed to update user');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteUser = async (userId: number): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const userStore = UserStore.getInstance();
+      userStore.deleteUser(userId);
+    } catch (error) {
+      setError(error instanceof UserError ? error.message : 'Failed to delete user');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetToAdmin = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const userStore = UserStore.getInstance();
+      userStore.resetToAdmin();
+    } catch (error) {
+      setError(error instanceof UserError ? error.message : 'Failed to reset to admin');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hasRole = (role: UserRole | UserRole[]): boolean => {
+    return AuthService.hasRole(role);
+  };
+
+  const isAdmin = (): boolean => {
+    return AuthService.isAdmin();
+  };
+
+  const isSupervisor = (): boolean => {
+    return AuthService.isSupervisor();
+  };
+
+  const isCollector = (): boolean => {
+    return AuthService.isCollector();
+  };
+
+  const isSeller = (): boolean => {
+    return AuthService.isSeller();
+  };
+
   const getUserById = (id: number): User | undefined => {
     return users.find(user => user.id === id);
   };
 
-  // Função para obter usuário por email
   const getUserByEmail = (email: string): User | undefined => {
     return users.find(user => user.email.toLowerCase() === email.toLowerCase());
   };
 
-  // Efeito para sincronizar usuários com o localStorage e outros armazenamentos
-  useEffect(() => {
-    // Usar o serviço de sincronização centralizado
-    UserSyncService.syncAllUsers(users);
-  }, [users]);
-
-  // Função para adicionar um novo usuário
-  const addUser = (newUser: User): void => {
-    setUsers(prevUsers => [...prevUsers, newUser]);
+  const value = {
+    users,
+    currentUser,
+    loading,
+    error,
+    addUser,
+    updateUser,
+    deleteUser,
+    resetToAdmin,
+    hasRole,
+    isAdmin,
+    isSupervisor,
+    isCollector,
+    isSeller,
+    getUserById,
+    getUserByEmail
   };
 
-  // Função para atualizar um usuário
-  const updateUser = (updatedUser: User): void => {
-    // Encontrar o usuário original para obter o email antigo
-    const originalUser = getUserById(updatedUser.id);
-    const oldEmail = originalUser?.email;
-    
-    // Verificar se houve alteração de email
-    if (oldEmail && oldEmail !== updatedUser.email) {
-      // Usar o serviço com o email antigo para garantir sincronização correta
-      UserSyncService.syncSingleUser(updatedUser, oldEmail);
-      // Atualizar o userInfo se for o usuário logado
-      UserSyncService.updateLoggedUser(updatedUser);
-    }
-    
-    setUsers(prevUsers =>
-      prevUsers.map(user =>
-        user.id === updatedUser.id ? updatedUser : user
-      )
-    );
-  };
-
-  // Função para excluir um usuário
-  const deleteUser = (userId: number): void => {
-    setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
-  };
-
-  return (
-    <UserContext.Provider value={{ users, setUsers, getUserById, getUserByEmail, updateUser, addUser, deleteUser }}>
-      {children}
-    </UserContext.Provider>
-  );
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };
 
-// Hook para usar o contexto
 export const useUsers = (): UserContextType => {
   const context = useContext(UserContext);
-
   if (context === undefined) {
     throw new Error('useUsers must be used within a UserProvider');
   }
-
   return context;
 };

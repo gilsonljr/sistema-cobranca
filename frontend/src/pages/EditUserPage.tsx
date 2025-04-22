@@ -25,28 +25,30 @@ import {
 import SaveIcon from '@mui/icons-material/Save';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useUsers, User } from '../contexts/UserContext';
-import UserPasswordService from '../services/UserPasswordService';
+import { useUsers } from '../contexts/UserContext';
+import { User, UserInput } from '../types/User';
 import UserSyncService from '../services/UserSyncService';
+import { convertToUserManagerFormat } from '../utils/userUtils';
 
 // Interface para o tipo de usuário já importada do UserContext
 
 const EditUserPage: React.FC = () => {
   // Usar o contexto de usuários
-  const { users, updateUser, getUserById } = useUsers();
+  const { users, updateUser } = useUsers();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const userId = parseInt(id || '0', 10);
 
-  const [formData, setFormData] = useState({
-    nome: '',
+  const [formData, setFormData] = useState<UserInput>({
     email: '',
-    senha: '',
-    confirmarSenha: '',
-    papeis: [] as string[],
-    permissoes: [] as string[],
-    ativo: true,
+    full_name: '',
+    role: 'collector',
+    is_active: true,
+    password: ''
   });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Lista de permissões disponíveis
   const permissoesDisponiveis = [
@@ -93,13 +95,11 @@ const EditUserPage: React.FC = () => {
 
     if (user) {
       setFormData({
-        nome: user.nome,
         email: user.email,
-        senha: '',
-        confirmarSenha: '',
-        papeis: user.papeis,
-        permissoes: user.permissoes,
-        ativo: user.ativo,
+        full_name: user.full_name,
+        role: user.role,
+        is_active: user.is_active,
+        password: ''
       });
     } else {
       // Se não encontrar o usuário, redirecione para a página de usuários
@@ -166,7 +166,7 @@ const EditUserPage: React.FC = () => {
   const handleSwitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
-      ativo: e.target.checked,
+      is_active: e.target.checked,
     });
   };
 
@@ -187,7 +187,7 @@ const EditUserPage: React.FC = () => {
     const newErrors = { ...errors };
 
     // Validar nome
-    if (!formData.nome.trim()) {
+    if (!formData.full_name.trim()) {
       newErrors.nome = 'Nome é obrigatório';
       valid = false;
     }
@@ -202,14 +202,14 @@ const EditUserPage: React.FC = () => {
     }
 
     // Validar senha (apenas se preenchida)
-    if (formData.senha) {
-      if (formData.senha.length < 6) {
+    if (formData.password) {
+      if (formData.password.length < 6) {
         newErrors.senha = 'A senha deve ter pelo menos 6 caracteres';
         valid = false;
       }
 
       // Validar confirmação de senha
-      if (formData.senha !== formData.confirmarSenha) {
+      if (formData.password !== formData.confirmarSenha) {
         newErrors.confirmarSenha = 'As senhas não coincidem';
         valid = false;
       }
@@ -222,7 +222,7 @@ const EditUserPage: React.FC = () => {
     }
 
     // Validar permissões
-    if (formData.permissoes.length === 0) {
+    if (!formData.permissoes || formData.permissoes.length === 0) {
       newErrors.permissoes = 'Selecione pelo menos uma permissão';
       valid = false;
     }
@@ -231,67 +231,52 @@ const EditUserPage: React.FC = () => {
     return valid;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-    if (validateForm()) {
-      // Validar senha
-      if (formData.senha && formData.senha !== formData.confirmarSenha) {
-        setSnackbar({
-          open: true,
-          message: 'As senhas não coincidem',
-          severity: 'error',
-        });
-        return;
+    try {
+      const user = users.find(u => u.id === userId);
+      if (!user) {
+        throw new Error('User not found');
       }
 
-      // Obter o usuário original para comparar o email
-      const originalUser = getUserById(userId);
-      const oldEmail = originalUser?.email || '';
+      const oldEmail = user.email;
       const newEmail = formData.email;
 
-      // Criar objeto de usuário atualizado
-      const updatedUser = {
-        id: userId,
-        nome: formData.nome,
-        email: formData.email,
-        papeis: formData.papeis,
-        permissoes: formData.permissoes,
-        ativo: formData.ativo,
-      };
+      // Update user in UserStore
+      await updateUser(userId, formData);
 
-      // Atualizar o usuário no contexto
-      updateUser(updatedUser);
+      // Convert to UserManager format for sync
+      const userManagerFormat = convertToUserManagerFormat({
+        ...user,
+        ...formData
+      });
 
-      // Sincronizar usuário e senha em todos os locais de armazenamento
-      if (formData.senha) {
-        // Se a senha foi alterada, passar a nova senha para sincronização
-        UserSyncService.syncSingleUser(updatedUser, oldEmail, formData.senha);
+      if (formData.password) {
+        // If password was changed, sync with password
+        UserSyncService.syncSingleUser(userManagerFormat, oldEmail, formData.password);
       } else if (oldEmail !== newEmail) {
-        // Se apenas o email mudou, sincronizar sem senha
-        UserSyncService.syncSingleUser(updatedUser, oldEmail);
+        // If only email changed, sync without password
+        UserSyncService.syncSingleUser(userManagerFormat, oldEmail);
       }
 
-      // Atualizar o usuário logado se for o mesmo
-      UserSyncService.updateLoggedUser(updatedUser);
+      // Update logged user if it's the same
+      UserSyncService.updateLoggedUser(userManagerFormat);
 
-      // Mostrar feedback de sucesso
+      // Show success feedback
       setSnackbar({
         open: true,
-        message: 'Usuário atualizado com sucesso!',
-        severity: 'success',
+        message: 'User updated successfully',
+        severity: 'success'
       });
 
-      // Redirecionar após um breve delay
-      setTimeout(() => {
-        navigate('/users');
-      }, 1500);
-    } else {
-      setSnackbar({
-        open: true,
-        message: 'Por favor, corrija os erros no formulário.',
-        severity: 'error',
-      });
+      navigate('/users');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update user');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -338,8 +323,8 @@ const EditUserPage: React.FC = () => {
             <TextField
               fullWidth
               label="Nome"
-              name="nome"
-              value={formData.nome}
+              name="full_name"
+              value={formData.full_name}
               onChange={handleTextFieldChange}
               error={!!errors.nome}
               helperText={errors.nome}
@@ -367,9 +352,9 @@ const EditUserPage: React.FC = () => {
             <TextField
               fullWidth
               label="Nova Senha (deixe em branco para manter a atual)"
-              name="senha"
+              name="password"
               type="password"
-              value={formData.senha}
+              value={formData.password}
               onChange={handleTextFieldChange}
               error={!!errors.senha}
               helperText={errors.senha}
@@ -457,9 +442,9 @@ const EditUserPage: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={formData.ativo}
+                  checked={formData.is_active}
                   onChange={handleSwitchChange}
-                  name="ativo"
+                  name="is_active"
                   color="primary"
                 />
               }
@@ -508,7 +493,7 @@ const EditUserPage: React.FC = () => {
               >
                 {permissoesDisponiveis.map((permissao) => (
                   <MenuItem key={permissao.id} value={permissao.id}>
-                    <Checkbox checked={formData.permissoes.indexOf(permissao.id) > -1} />
+                    <Checkbox checked={formData.permissoes ? formData.permissoes.indexOf(permissao.id) > -1 : false} />
                     <ListItemText primary={permissao.nome} />
                   </MenuItem>
                 ))}

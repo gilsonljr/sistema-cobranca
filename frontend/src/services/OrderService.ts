@@ -424,14 +424,24 @@ class OrderService {
    */
   async getDuplicateOrders(): Promise<Order[]> {
     try {
+      console.log('OrderService: getDuplicateOrders called');
+      
       // For development with mock data
       const mockMode = process.env.REACT_APP_MOCK_API === 'true';
+      console.log('OrderService: Mock mode is', mockMode);
 
       if (mockMode) {
         const savedOrders = localStorage.getItem('orders');
         const orders = savedOrders ? JSON.parse(savedOrders) : [];
+        console.log(`OrderService: Found ${orders.length} orders in localStorage`);
 
-        // Find orders with the same customer phone
+        // Method 1: Find orders marked as duplicates
+        const markedDuplicates = orders.filter((order: Order) => 
+          order.situacaoVenda === 'Possíveis Duplicados'
+        );
+        console.log(`OrderService: Found ${markedDuplicates.length} orders marked as duplicates`);
+        
+        // Method 2: Find orders with the same phone
         const duplicates: Order[] = [];
         const phoneMap = new Map<string, Order[]>();
 
@@ -445,17 +455,30 @@ class OrderService {
         });
 
         // Add orders to duplicates if there are multiple with the same phone
-        phoneMap.forEach((orderList) => {
+        phoneMap.forEach((orderList, phone) => {
           if (orderList.length > 1) {
+            console.log(`OrderService: Found ${orderList.length} orders with the same phone: ${phone}`);
             duplicates.push(...orderList);
           }
         });
-
-        return duplicates;
+        
+        // Combine both methods and remove duplicates
+        const combinedDuplicates = [...markedDuplicates];
+        
+        // Add duplicates from Method 2 that aren't already in the list
+        for (const order of duplicates) {
+          if (!combinedDuplicates.some(o => o.idVenda === order.idVenda)) {
+            combinedDuplicates.push(order);
+          }
+        }
+        
+        console.log(`OrderService: Returning ${combinedDuplicates.length} total duplicate orders`);
+        return combinedDuplicates;
       }
 
       // For production with real API
       const response = await api.get<ApiOrder[]>('/api/v1/orders/duplicates');
+      console.log(`OrderService: API returned ${response.data.length} duplicate orders`);
       return response.data.map(order => this.convertToFrontendOrder(order));
     } catch (error) {
       console.error('Error fetching duplicate orders:', error);
@@ -468,16 +491,94 @@ class OrderService {
    */
   async detectDuplicates(): Promise<Order[]> {
     try {
+      console.log('OrderService: detectDuplicates called');
+      
       // For development with mock data
       const mockMode = process.env.REACT_APP_MOCK_API === 'true';
+      console.log('OrderService: Mock mode is', mockMode);
 
       if (mockMode) {
-        // In mock mode, just return the existing duplicates
-        return this.getDuplicateOrders();
+        console.log('OrderService: Running duplicate detection in mock mode');
+        
+        const savedOrders = localStorage.getItem('orders');
+        const orders = savedOrders ? JSON.parse(savedOrders) : [];
+        console.log(`OrderService: Analyzing ${orders.length} orders for duplicates`);
+        
+        // Find potential duplicates based on phone number and order amount
+        const duplicates: Order[] = [];
+        const processedIds = new Set<string>(); // Track already processed orders
+        
+        for (let i = 0; i < orders.length; i++) {
+          const order = orders[i];
+          
+          // Skip if already processed
+          if (processedIds.has(order.idVenda)) continue;
+          
+          let isDuplicate = false;
+          const potentialDuplicates: Order[] = [order];
+          
+          for (let j = 0; j < orders.length; j++) {
+            if (i === j) continue; // Skip self
+            
+            const otherOrder = orders[j];
+            
+            // Skip if already processed
+            if (processedIds.has(otherOrder.idVenda)) continue;
+            
+            // Check if orders have the same phone
+            if (order.telefone === otherOrder.telefone) {
+              // Check if values are within 5% threshold
+              const valueDiff = Math.abs(order.valorVenda - otherOrder.valorVenda);
+              const maxValue = Math.max(order.valorVenda, otherOrder.valorVenda);
+              const percentDiff = maxValue > 0 ? (valueDiff / maxValue) : 0;
+              
+              if (percentDiff <= 0.05) { // 5% threshold
+                isDuplicate = true;
+                potentialDuplicates.push(otherOrder);
+                processedIds.add(otherOrder.idVenda);
+              }
+            }
+          }
+          
+          if (isDuplicate) {
+            // Mark all as duplicates and add to the result
+            potentialDuplicates.forEach(dupOrder => {
+              // Create a copy to update the status
+              const updatedOrder = {
+                ...dupOrder,
+                situacaoVenda: 'Possíveis Duplicados',
+                status: 'PENDING'
+              };
+              duplicates.push(updatedOrder);
+              processedIds.add(dupOrder.idVenda);
+            });
+            
+            console.log(`OrderService: Found duplicate set with ${potentialDuplicates.length} orders (phone: ${order.telefone})`);
+          }
+        }
+        
+        // Update orders in localStorage
+        const updatedOrders = orders.map((order: Order) => {
+          const duplicate = duplicates.find(d => d.idVenda === order.idVenda);
+          if (duplicate) {
+            return {
+              ...order,
+              situacaoVenda: 'Possíveis Duplicados',
+              status: 'PENDING'
+            };
+          }
+          return order;
+        });
+        
+        localStorage.setItem('orders', JSON.stringify(updatedOrders));
+        console.log(`OrderService: Updated localStorage with ${duplicates.length} marked duplicates`);
+        
+        return duplicates;
       }
 
       // For production with real API
       const response = await api.post<ApiOrder[]>('/api/v1/orders/detect-duplicates');
+      console.log(`OrderService: API returned ${response.data.length} detected duplicates`);
       return response.data.map(order => this.convertToFrontendOrder(order));
     } catch (error) {
       console.error('Error detecting duplicate orders:', error);

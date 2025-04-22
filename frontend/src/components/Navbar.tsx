@@ -34,26 +34,52 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
-import AuthService from '../services/AuthService';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import LeaderboardIcon from '@mui/icons-material/Leaderboard';
+import UnifiedAuthService from '../services/UnifiedAuthService';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
+import AuthService from '../services/AuthService';
+import { UserRole } from '../types/User';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import useAuth from '../hooks/useAuth';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth(); // Use the custom hook to get user info
   const [reportsMenuAnchor, setReportsMenuAnchor] = useState<null | HTMLElement>(null);
+  const [rankingMenuAnchor, setRankingMenuAnchor] = useState<null | HTMLElement>(null);
   const [settingsMenuAnchor, setSettingsMenuAnchor] = useState<null | HTMLElement>(null);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [darkMode, setDarkMode] = useState(false);
-  const [userInfo, setUserInfo] = useState<{id: number, email: string, fullName: string, role: string} | null>(null);
   const [conversaoChangerOpen, setConversaoChangerOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const authUser = AuthService.getCurrentUser();
 
   // Carregar informações do usuário
   useEffect(() => {
-    const storedUserInfo = localStorage.getItem('userInfo');
-    if (storedUserInfo) {
-      setUserInfo(JSON.parse(storedUserInfo));
+    // Use UnifiedAuthService to get current user info instead of localStorage directly
+    const userInfo = UnifiedAuthService.getUserInfo();
+    if (userInfo) {
+      // setUserInfo(userInfo); // We're now using the useAuth hook
     }
+
+    // Add an event listener for user login events
+    const handleUserLogin = () => {
+      const updatedUserInfo = UnifiedAuthService.getUserInfo();
+      if (updatedUserInfo) {
+        // setUserInfo(updatedUserInfo); // We're now using the useAuth hook
+      }
+    };
+
+    // Listen for custom login event
+    window.addEventListener('user-login', handleUserLogin);
+
+    // Clean up the event listener when component unmounts
+    return () => {
+      window.removeEventListener('user-login', handleUserLogin);
+    };
   }, []);
 
   const handleReportsMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -67,6 +93,20 @@ const Navbar = () => {
   const handleReportSelect = (path: string) => {
     navigate(path);
     handleReportsMenuClose();
+  };
+
+  // Handlers for Ranking menu
+  const handleRankingMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setRankingMenuAnchor(event.currentTarget);
+  };
+
+  const handleRankingMenuClose = () => {
+    setRankingMenuAnchor(null);
+  };
+
+  const handleRankingSelect = (path: string) => {
+    navigate(path);
+    handleRankingMenuClose();
   };
 
   const handleSettingsMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -107,10 +147,13 @@ const Navbar = () => {
     setUserMenuAnchor(null);
   };
 
+  // New handleLogout function using our custom hook
   const handleLogout = () => {
-    AuthService.logout();
+    logout(); // Use the logout function from our custom hook
+    navigate('/login');
   };
 
+  // Clear all data function for deep logout
   const handleLogoutAndClear = () => {
     // Clear all cache and cookies
     if (window.caches) {
@@ -129,22 +172,30 @@ const Navbar = () => {
       document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
     });
 
-    // Clear localStorage (except what's needed for the logout redirect)
-    const authTokens = localStorage.getItem('authTokens');
+    // Clear localStorage
     localStorage.clear();
-    localStorage.setItem('authTokens', authTokens || '');
 
     // Clear sessionStorage
     sessionStorage.clear();
 
-    // Logout
-    AuthService.logout();
+    // Use our custom logout
+    logout();
+
+    // Navigate to login
+    navigate('/login');
   };
 
   const handleProfileClick = () => {
     navigate('/profile');
     handleUserMenuClose();
   };
+
+  const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const canAccessSettings = AuthService.hasRole(['admin']);
+
   return (
     <AppBar
       position="fixed"
@@ -177,21 +228,21 @@ const Navbar = () => {
         <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
           <Button
             component={Link}
-            to="/admin"
+            to="/"
             startIcon={<DashboardIcon />}
             sx={{
-              color: location.pathname === '/admin' ? 'primary.main' : 'text.secondary',
+              color: location.pathname === '/' ? 'primary.main' : 'text.secondary',
               px: 2,
               borderRadius: '8px',
               textTransform: 'none',
               fontWeight: 500,
-              bgcolor: location.pathname === '/admin' ? 'rgba(33, 150, 243, 0.05)' : 'transparent',
+              bgcolor: location.pathname === '/' ? 'rgba(33, 150, 243, 0.05)' : 'transparent',
               '&:hover': {
-                bgcolor: location.pathname === '/admin' ? 'rgba(33, 150, 243, 0.08)' : 'rgba(0, 0, 0, 0.02)',
+                bgcolor: location.pathname === '/' ? 'rgba(33, 150, 243, 0.08)' : 'rgba(0, 0, 0, 0.02)',
               },
             }}
           >
-            Admin Dashboard
+            Dashboard
           </Button>
           <Button
             aria-controls="reports-menu"
@@ -230,10 +281,12 @@ const Navbar = () => {
               <ArticleOutlinedIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
               Relatórios Básicos
             </MenuItem>
-            <MenuItem onClick={() => handleReportSelect('/advanced-reports')} sx={{ py: 1, px: 2 }}>
-              <AssessmentIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
-              Relatórios Avançados
-            </MenuItem>
+            {user && (user.role === 'admin' || user.role === 'supervisor') && (
+              <MenuItem onClick={() => handleReportSelect('/advanced-reports')} sx={{ py: 1, px: 2 }}>
+                <AssessmentIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
+                Relatórios Avançados
+              </MenuItem>
+            )}
           </Menu>
         </Box>
 
@@ -253,6 +306,51 @@ const Navbar = () => {
           >
             Rastreamento
           </Button>
+
+          <Button
+            aria-controls="ranking-menu"
+            aria-haspopup="true"
+            onClick={handleRankingMenuOpen}
+            startIcon={<EmojiEventsIcon />}
+            endIcon={<KeyboardArrowDownIcon />}
+            sx={{
+              color: location.pathname.includes('/ranking') ? 'primary.main' : 'text.primary',
+              px: 2,
+              bgcolor: location.pathname.includes('/ranking') ? 'rgba(33, 150, 243, 0.08)' : 'transparent',
+              '&:hover': {
+                bgcolor: location.pathname.includes('/ranking') ? 'rgba(33, 150, 243, 0.12)' : 'primary.light',
+              },
+            }}
+          >
+            Ranking
+          </Button>
+          <Menu
+            id="ranking-menu"
+            anchorEl={rankingMenuAnchor}
+            keepMounted
+            open={Boolean(rankingMenuAnchor)}
+            onClose={handleRankingMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            sx={{ mt: 1 }}
+          >
+            <MenuItem onClick={() => handleRankingSelect('/ranking')} sx={{ py: 1, px: 2 }}>
+              <EmojiEventsIcon fontSize="small" sx={{ mr: 1.5, color: '#FFD700' }} />
+              Ranking de Vendedores
+            </MenuItem>
+            {user && (user.role === 'admin' || user.role === 'supervisor') && (
+              <MenuItem onClick={() => handleRankingSelect('/ranking-operador')} sx={{ py: 1, px: 2 }}>
+                <LeaderboardIcon fontSize="small" sx={{ mr: 1.5, color: '#2196F3' }} />
+                Ranking de Operadores
+              </MenuItem>
+            )}
+          </Menu>
 
           <Button
             aria-controls="settings-menu"
@@ -371,6 +469,13 @@ const Navbar = () => {
               <ListItemText primary="API Correios" />
             </MenuItem>
 
+            <MenuItem onClick={() => handleSettingSelect('/zap-config')} sx={{ py: 1, px: 2 }}>
+              <ListItemIcon>
+                <WhatsAppIcon fontSize="small" sx={{ color: '#25D366' }} />
+              </ListItemIcon>
+              <ListItemText primary="Configurações WhatsApp" />
+            </MenuItem>
+
             {/* Desenvolvimento */}
             <Divider />
             <MenuItem onClick={() => handleSettingSelect('/example')} sx={{ py: 1, px: 2 }}>
@@ -409,9 +514,9 @@ const Navbar = () => {
                 },
               }}
             >
-              {userInfo ? (
+              {user ? (
                 <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                  {userInfo.fullName.charAt(0).toUpperCase()}
+                  {user.fullName.charAt(0).toUpperCase()}
                 </Avatar>
               ) : (
                 <AccountCircleIcon />
@@ -435,19 +540,19 @@ const Navbar = () => {
             }}
             sx={{ mt: 1 }}
           >
-            {userInfo && (
+            {user && (
               <Box sx={{ px: 2, py: 1 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
-                  {userInfo.fullName}
+                  {user.fullName}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {userInfo.email}
+                  {user.email}
                 </Typography>
                 <Typography variant="caption" color="primary" sx={{ textTransform: 'capitalize' }}>
-                  {userInfo.role === 'admin' ? 'Administrador' :
-                   userInfo.role === 'supervisor' ? 'Supervisor' :
-                   userInfo.role === 'collector' ? 'Operador' :
-                   userInfo.role === 'seller' ? 'Vendedor' : userInfo.role}
+                  {user.role === 'admin' ? 'Administrador' :
+                   user.role === 'supervisor' ? 'Supervisor' :
+                   user.role === 'collector' ? 'Operador' :
+                   user.role === 'seller' ? 'Vendedor' : user.role}
                 </Typography>
               </Box>
             )}

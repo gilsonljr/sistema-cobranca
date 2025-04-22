@@ -138,6 +138,9 @@
             <button id="fix-button" onclick="applyFix()">Aplicar Correção Básica</button>
             <button id="restore-button" onclick="restoreFullData()" style="background-color: #4caf50;">Restaurar Dados Completos</button>
             <button id="clean-button" onclick="cleanSystem()" style="background-color: #f44336;">Limpar Sistema (Manter Admin)</button>
+            <a href="clear-users.html" style="background-color: #ff9800; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; display: inline-block;">Limpar Apenas Usuários</a>
+            <a href="reset-all-users.html" style="background-color: #9c27b0; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; display: inline-block;">Redefinir Todos Usuários</a>
+            <a href="direct-user-reset.html" style="background-color: #e91e63; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; display: inline-block;">Redefinição Direta</a>
             <button class="success" onclick="goToLogin()">Ir para Login</button>
         </div>
 
@@ -208,7 +211,7 @@
                 addLog('Correção cancelada pelo usuário.', 'info');
                 return;
             }
-            
+
             addLog('Iniciando correção de emergência...', 'info');
 
             try {
@@ -242,13 +245,13 @@
                 addLog('Limpeza do sistema cancelada pelo usuário.', 'info');
                 return;
             }
-            
+
             // Pedir confirmação adicional devido à gravidade da operação
             if (!confirm('Confirme novamente: Todos os dados do sistema serão REMOVIDOS. Apenas o usuário admin permanecerá. Tem certeza absoluta?')) {
                 addLog('Limpeza do sistema cancelada na confirmação secundária.', 'info');
                 return;
             }
-            
+
             addLog('Iniciando limpeza do sistema...', 'info');
 
             try {
@@ -290,7 +293,20 @@
                 // 4. Criar apenas o usuário admin
                 addLog('Criando usuário admin...', 'info');
 
-                // Para o sistema de emergência
+                // IMPORTANTE: Definir o usuário admin único que deve ser mantido
+                const adminUser = {
+                    id: 1,
+                    nome: "Admin",
+                    email: "admin@sistema.com",
+                    papeis: ["admin"],
+                    permissoes: ["criar_usuario", "editar_usuario", "excluir_usuario", "ver_relatorios", "editar_configuracoes", "ver_todos_pedidos", "editar_pedidos"],
+                    ativo: true
+                };
+
+                // Para o contexto principal - APENAS ADMIN
+                localStorage.setItem('users', JSON.stringify([adminUser]));
+
+                // Para o sistema de emergência - APENAS ADMIN
                 const defaultUsers = {
                     'admin@sistema.com': {
                         id: 1,
@@ -302,27 +318,14 @@
                 };
                 localStorage.setItem('default_users', JSON.stringify(defaultUsers));
 
-                // Para o contexto principal
-                const contextUsers = [
-                    {
-                        id: 1,
-                        nome: "Admin",
-                        email: "admin@sistema.com",
-                        papeis: ["admin"],
-                        permissoes: ["criar_usuario", "editar_usuario", "excluir_usuario", "ver_relatorios", "editar_configuracoes", "ver_todos_pedidos", "editar_pedidos"],
-                        ativo: true
-                    }
-                ];
-                localStorage.setItem('users', JSON.stringify(contextUsers));
-
-                // Limpar senhas de usuários
+                // Limpar senhas de usuários - APENAS ADMIN
                 addLog('Limpando senhas de usuários...', 'info');
                 const adminPasswords = {
                     'admin@sistema.com': 'admin123'
                 };
                 localStorage.setItem('user_passwords', JSON.stringify(adminPasswords));
 
-                // Limpar mock users (usado em algumas páginas)
+                // Limpar mock users - APENAS ADMIN
                 addLog('Limpando mock users...', 'info');
                 localStorage.setItem('mockUsers', JSON.stringify([{
                     id: 1,
@@ -332,7 +335,79 @@
                     ativo: true
                 }]));
 
-                // 5. Remover completamente todos os dados de pedidos
+                // 5. Verificar e limpar todos os armazenamentos de usuários
+                addLog('Verificando todos os armazenamentos de usuários...', 'info');
+
+                // Lista de chaves específicas de usuários que verificamos explicitamente
+                const checkedUserKeys = ['users', 'default_users', 'user_passwords', 'mockUsers', 'userInfo'];
+
+                // Remover quaisquer outros armazenamentos de usuários
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (
+                        key.includes('user') ||
+                        key.includes('User') ||
+                        key.includes('usuario') ||
+                        key.includes('Usuario') ||
+                        key.includes('perfil') ||
+                        key.includes('Perfil') ||
+                        key.includes('role') ||
+                        key.includes('Role') ||
+                        key.includes('admin') ||
+                        key.includes('Admin')
+                    )) {
+                        // Verificar se não é uma das chaves que já tratamos explicitamente
+                        if (!checkedUserKeys.includes(key)) {
+                            // Limpar ou definir para um array vazio
+                            localStorage.setItem(key, JSON.stringify([]));
+                            addLog(`Limpando armazenamento adicional de usuários: ${key}`, 'info');
+                        }
+                    }
+                }
+
+                // 6. Chamar explicitamente o UserSyncService para forçar a sincronização correta
+                const syncScript = document.createElement('script');
+                syncScript.textContent = `
+                    // Forçar sincronização correta de usuários
+                    try {
+                        // Garantir que apenas o admin exista em todos os contextos
+                        const adminUser = {
+                            id: 1,
+                            nome: "Admin",
+                            email: "admin@sistema.com",
+                            papeis: ["admin"],
+                            permissoes: ["criar_usuario", "editar_usuario", "excluir_usuario", "ver_relatorios", "editar_configuracoes", "ver_todos_pedidos", "editar_pedidos"],
+                            ativo: true
+                        };
+
+                        localStorage.setItem('users', JSON.stringify([adminUser]));
+
+                        // Verificar se o módulo UserSyncService está disponível
+                        if (window.UserSyncService && typeof window.UserSyncService.syncAllUsers === 'function') {
+                            window.UserSyncService.syncAllUsers([adminUser]);
+                            console.log('UserSyncService encontrado e chamado para sincronizar usuários');
+                        } else {
+                            console.log('UserSyncService não disponível diretamente');
+                        }
+
+                        // Disparar evento personalizado para aplicativo React
+                        window.dispatchEvent(new CustomEvent('user-data-reset', { detail: { users: [adminUser] } }));
+
+                        // Disparar evento para forçar recarga de usuários
+                        window.dispatchEvent(new CustomEvent('user-list-reset'));
+                        console.log('Evento user-list-reset disparado');
+
+                        console.log('Usuários redefinidos para apenas admin');
+                    } catch (err) {
+                        console.error('Erro ao forçar sincronização de usuários:', err);
+                    }
+                `;
+                document.body.appendChild(syncScript);
+                setTimeout(() => {
+                    document.body.removeChild(syncScript);
+                }, 1000);
+
+                // 7. Remover completamente todos os dados de pedidos
                 addLog('Limpando pedidos de todas as fontes...', 'info');
                 localStorage.setItem('orders', JSON.stringify([]));
                 localStorage.setItem('salesData', JSON.stringify([]));
@@ -344,23 +419,23 @@
                 localStorage.setItem('dashboard_data', JSON.stringify({}));
                 localStorage.setItem('cached_orders', JSON.stringify([]));
                 localStorage.setItem('last_orders', JSON.stringify([]));
-                
+
                 // Remover quaisquer outros itens que possam conter dados de pedidos
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
                     if (key && (
-                        key.includes('order') || 
+                        key.includes('order') ||
                         key.includes('Order') ||
-                        key.includes('venda') || 
-                        key.includes('Venda') || 
-                        key.includes('pedido') || 
+                        key.includes('venda') ||
+                        key.includes('Venda') ||
+                        key.includes('pedido') ||
                         key.includes('Pedido')
                     )) {
                         localStorage.setItem(key, JSON.stringify([]));
                     }
                 }
 
-                // 6. Manter produtos
+                // 8. Manter produtos
                 addLog('Configurando produtos...', 'info');
                 const sampleProducts = [
                     {
@@ -404,15 +479,16 @@
                 ];
                 localStorage.setItem('products', JSON.stringify(sampleProducts));
 
-                // 7. Adicionar um script para forçar a atualização do estado do app
+                // 9. Adicionar um script para forçar a atualização do estado do app
                 const script = document.createElement('script');
                 script.textContent = `
                     // Tentar enviar um evento para o App.tsx para recarregar os pedidos
                     try {
                         window.dispatchEvent(new CustomEvent('emergency-fix-clear-orders'));
-                        console.log('Evento emergency-fix-clear-orders disparado');
+                        window.dispatchEvent(new CustomEvent('user-list-reset'));
+                        console.log('Eventos de emergência disparados');
                     } catch (err) {
-                        console.error('Erro ao disparar evento:', err);
+                        console.error('Erro ao disparar eventos:', err);
                     }
                 `;
                 document.body.appendChild(script);
@@ -420,13 +496,22 @@
                     document.body.removeChild(script);
                 }, 1000);
 
-                // 8. Mostrar mensagem de sucesso
+                // 10. Mostrar mensagem de sucesso
                 document.getElementById('success-message').style.display = 'block';
                 document.getElementById('error-message').style.display = 'none';
                 addLog('Sistema limpo com sucesso! Apenas o admin foi mantido e todos os pedidos foram removidos.', 'success');
 
                 // Habilitar botão de ir para login
                 document.querySelector('button.success').style.display = 'inline-block';
+
+                // Forçar recarga da página após 3 segundos para garantir que todas as alterações sejam aplicadas
+                addLog('A página será recarregada em 3 segundos para aplicar todas as alterações...', 'info');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+
+                // 11. Exibir estado final
+                showAllUsersAndPasswords();
 
             } catch (error) {
                 document.getElementById('success-message').style.display = 'none';
@@ -444,7 +529,7 @@
                 addLog('Exibição de usuários e senhas cancelada pelo usuário.', 'info');
                 return;
             }
-            
+
             addLog('Coletando informações de todos os usuários e senhas...', 'info');
 
             try {
@@ -651,7 +736,7 @@
 
                 // 3. Atualizar o users principal (contexto)
                 localStorage.setItem('users', JSON.stringify(unifiedUsers));
-                
+
                 // 4. Simular a inicialização do UserSyncService
                 // Isso atualizará automaticamente todos os outros locais de armazenamento
                 const script = document.createElement('script');
@@ -662,11 +747,11 @@
                             // Obter os usuários do localStorage
                             const usersStr = localStorage.getItem('users');
                             const users = usersStr ? JSON.parse(usersStr) : [];
-                            
+
                             // Sincronizar com default_users
                             const defaultUsersStr = localStorage.getItem('default_users');
                             const defaultUsers = defaultUsersStr ? JSON.parse(defaultUsersStr) : {};
-                            
+
                             // Atualizar entradas para todos os usuários
                             users.forEach(user => {
                                 // Mapear papel para role
@@ -675,10 +760,10 @@
                                 else if (user.papeis.includes('supervisor')) role = 'supervisor';
                                 else if (user.papeis.includes('collector') || user.papeis.includes('operador')) role = 'collector';
                                 else if (user.papeis.includes('seller') || user.papeis.includes('vendedor')) role = 'seller';
-                                
+
                                 // Manter senha existente ou usar padrão
                                 const existingPassword = defaultUsers[user.email]?.password || 'senha123';
-                                
+
                                 defaultUsers[user.email] = {
                                     id: user.id,
                                     email: user.email,
@@ -687,9 +772,9 @@
                                     password: existingPassword
                                 };
                             });
-                            
+
                             localStorage.setItem('default_users', JSON.stringify(defaultUsers));
-                            
+
                             // Converter para o formato mockUsers
                             const mockUsers = users.map(user => {
                                 // Determinar perfil
@@ -698,7 +783,7 @@
                                 else if (user.papeis.includes('supervisor')) perfil = 'Supervisor';
                                 else if (user.papeis.includes('collector') || user.papeis.includes('operador')) perfil = 'Operador';
                                 else if (user.papeis.includes('seller') || user.papeis.includes('vendedor')) perfil = 'Vendedor';
-                                
+
                                 return {
                                     id: user.id,
                                     nome: user.nome,
@@ -708,13 +793,13 @@
                                     ativo: user.ativo
                                 };
                             });
-                            
+
                             localStorage.setItem('mockUsers', JSON.stringify(mockUsers));
-                            
+
                             // Sincronizar senhas se necessário
                             const passwordsStr = localStorage.getItem('user_passwords');
                             const passwords = passwordsStr ? JSON.parse(passwordsStr) : {};
-                            
+
                             // Verificar senhas nos default_users e adicioná-las se não existirem
                             users.forEach(user => {
                                 // Se não existe senha para este usuário, mas existe no default_users
@@ -722,9 +807,9 @@
                                     passwords[user.email] = defaultUsers[user.email].password;
                                 }
                             });
-                            
+
                             localStorage.setItem('user_passwords', JSON.stringify(passwords));
-                            
+
                             console.log('Sincronização simulada concluída com sucesso!');
                         } catch (error) {
                             console.error('Erro durante a sincronização simulada:', error);

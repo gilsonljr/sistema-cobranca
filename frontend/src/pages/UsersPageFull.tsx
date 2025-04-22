@@ -38,7 +38,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import SecurityIcon from '@mui/icons-material/Security';
 import PeopleIcon from '@mui/icons-material/People';
 import { useNavigate } from 'react-router-dom';
-import { useUsers, User } from '../contexts/UserContext';
+import { useUsers } from '../contexts/UserContext';
+import { User } from '../services/UserManager';
 
 // Interface para o tipo de usuário já importada do UserContext
 
@@ -49,7 +50,7 @@ interface UsersPageFullProps {
 const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
   const navigate = useNavigate();
   // Usar o contexto de usuários
-  const { users, setUsers } = useUsers();
+  const { users } = useUsers();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<number | null>(null);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
@@ -71,7 +72,7 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
 
     // Desabilitando a criação automática de usuários a partir de pedidos
     console.log('Criação automática de usuários desabilitada. Use a página de padronização para vincular vendedores/operadores a usuários existentes.');
-    
+
     // Apenas atualiza contagem de pedidos por usuário (sem criar novos usuários)
     const orderCounts: {[key: string]: number} = {};
 
@@ -128,9 +129,9 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       return (
-        user.nome.toLowerCase().includes(searchLower) ||
-        user.email.toLowerCase().includes(searchLower) ||
-        user.papeis.some(papel => papel.toLowerCase().includes(searchLower))
+        (user.nome ? user.nome.toLowerCase().includes(searchLower) : false) ||
+        (user.email ? user.email.toLowerCase().includes(searchLower) : false) ||
+        (user.papeis ? user.papeis.some(papel => papel.toLowerCase().includes(searchLower)) : false)
       );
     }
 
@@ -151,8 +152,8 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
     if (assignedOrders[userToDelete.email] && assignedOrders[userToDelete.email] > 0) {
       // Usuário tem pedidos associados - não pode ser excluído, apenas desativado
       const papeis = [];
-      if (userToDelete.papeis.includes('vendedor')) papeis.push('Vendedor');
-      if (userToDelete.papeis.includes('operador')) papeis.push('Operador');
+      if (userToDelete.papeis && userToDelete.papeis.includes('vendedor')) papeis.push('Vendedor');
+      if (userToDelete.papeis && userToDelete.papeis.includes('operador')) papeis.push('Operador');
 
       const papeisTexto = papeis.join(' e ');
 
@@ -174,7 +175,10 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
 
   const handleDeleteConfirm = () => {
     if (userToDelete !== null) {
-      setUsers(users.filter(user => user.id !== userToDelete));
+      // Filter users locally - in a real app, you would call an API
+      const updatedUsers = users.filter(user => user.id !== userToDelete);
+      // Since we can't update the context directly, we could use localStorage
+      localStorage.setItem('users', JSON.stringify(updatedUsers));
     }
     setDeleteDialogOpen(false);
     setUserToDelete(null);
@@ -183,9 +187,11 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
   const handleDeactivateConfirm = () => {
     if (userToDeactivate !== null) {
       // Atualiza o status do usuário para inativo
-      setUsers(users.map(user =>
+      const updatedUsers = users.map(user =>
         user.id === userToDeactivate ? { ...user, ativo: false } : user
-      ));
+      );
+      // Since we can't update the context directly, we could use localStorage
+      localStorage.setItem('users', JSON.stringify(updatedUsers));
     }
     setDeactivateDialogOpen(false);
     setUserToDeactivate(null);
@@ -294,7 +300,7 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {user.papeis.map(papel => {
+                        {user.papeis && user.papeis.map(papel => {
                           let color: 'primary' | 'secondary' | 'success' | 'info' | 'default' = 'default';
                           let icon;
 
@@ -344,9 +350,9 @@ const UsersPageFull: React.FC<UsersPageFullProps> = ({ orders = [] }) => {
                       />
                     </TableCell>
                     <TableCell>
-                      <Tooltip title={user.permissoes.join(', ')}>
+                      <Tooltip title={user.permissoes ? user.permissoes.join(', ') : ''}>
                         <Chip
-                          label={`${user.permissoes.length} permissões`}
+                          label={`${user.permissoes ? user.permissoes.length : 0} permissões`}
                           size="small"
                           color="default"
                           sx={{

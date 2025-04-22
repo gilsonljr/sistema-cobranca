@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  Alert, 
-  CircularProgress 
+import {
+  Box,
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Paper,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AuthService from '../services/AuthService';
@@ -36,24 +36,27 @@ const PasswordResetPage: React.FC = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
-    
+
     // Validate passwords
     if (newPassword !== confirmPassword) {
       setError('As senhas não coincidem.');
       return;
     }
-    
+
     if (newPassword.length < 8) {
       setError('A senha deve ter pelo menos 8 caracteres.');
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
-      await AuthService.resetPassword(token, newPassword);
+      await AuthService.resetPassword({
+        token,
+        new_password: newPassword
+      });
       setSuccess(true);
-      
+
       // Redirect to login page after 3 seconds
       setTimeout(() => {
         navigate('/login');
@@ -80,13 +83,13 @@ const PasswordResetPage: React.FC = () => {
           <Typography component="h1" variant="h5" align="center" gutterBottom>
             Redefinir Senha
           </Typography>
-          
+
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
-          
+
           {success ? (
             <Alert severity="success">
               Senha redefinida com sucesso! Você será redirecionado para a página de login em instantes.

@@ -26,8 +26,8 @@ const mockOperators = [
 
 interface OperatorPerformanceProps {
   orders: Order[];
-  startDate?: Date;
-  endDate?: Date;
+  startDate?: Date | null;
+  endDate?: Date | null;
 }
 
 const OperatorPerformance: React.FC<OperatorPerformanceProps> = ({

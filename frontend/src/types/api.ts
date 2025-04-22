@@ -18,7 +18,8 @@ export enum OrderStatus {
   NEGOTIATING = 'negotiating',
   CANCELLED = 'cancelled',
   DELIVERED = 'delivered',
-  DELETED = 'deleted'
+  DELETED = 'deleted',
+  LIBERACAO = 'liberacao'
 }
 
 // Order types

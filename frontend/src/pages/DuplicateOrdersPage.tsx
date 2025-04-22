@@ -32,6 +32,8 @@ const DuplicateOrdersPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  console.log("DuplicateOrdersPage mounted");
+
   // Agrupar pedidos duplicados por telefone
   const groupedOrders = duplicateOrders.reduce((groups, order) => {
     const phone = order.telefone || 'unknown';
@@ -44,10 +46,23 @@ const DuplicateOrdersPage: React.FC = () => {
 
   // Carregar pedidos duplicados
   const loadDuplicateOrders = async () => {
+    console.log("Loading duplicate orders...");
     try {
       setLoading(true);
       setError(null);
+      
+      // Get mock mode status
+      const mockMode = process.env.REACT_APP_MOCK_API === 'true';
+      console.log("Mock mode:", mockMode);
+      
+      // If in mock mode, check localStorage directly first
+      if (mockMode) {
+        const savedOrders = localStorage.getItem('orders');
+        console.log("Orders in localStorage:", savedOrders ? JSON.parse(savedOrders).length : 0);
+      }
+      
       const orders = await OrderService.getDuplicateOrders();
+      console.log("Duplicate orders loaded:", orders.length, orders);
       setDuplicateOrders(orders);
     } catch (err: any) {
       console.error('Erro ao carregar pedidos duplicados:', err);
@@ -59,13 +74,15 @@ const DuplicateOrdersPage: React.FC = () => {
 
   // Executar detecção de duplicados
   const runDuplicateDetection = async () => {
+    console.log("Running duplicate detection...");
     try {
       setLoading(true);
       setError(null);
 
       // Aqui você chamaria a API para executar a detecção de duplicados
-      // Por enquanto, vamos apenas recarregar os duplicados existentes
-      await loadDuplicateOrders();
+      const duplicates = await OrderService.detectDuplicates();
+      console.log("Detected duplicates:", duplicates.length, duplicates);
+      setDuplicateOrders(duplicates);
 
       setSuccess('Detecção de duplicados executada com sucesso.');
       setTimeout(() => setSuccess(null), 3000);
@@ -79,11 +96,12 @@ const DuplicateOrdersPage: React.FC = () => {
 
   // Marcar pedido como não duplicado
   const markAsNotDuplicate = async (orderId: string) => {
+    console.log("Marking order as not duplicate:", orderId);
     try {
       setLoading(true);
 
       // Atualizar o pedido para não ser mais considerado duplicado
-      await OrderService.updateOrder(orderId, { situacaoVenda: 'pending' });
+      await OrderService.updateOrder(orderId, { situacaoVenda: 'Liberação' });
 
       // Remover o pedido da lista local
       setDuplicateOrders(prev => prev.filter(order => order.idVenda !== orderId));
@@ -100,6 +118,7 @@ const DuplicateOrdersPage: React.FC = () => {
 
   // Carregar pedidos ao montar o componente
   useEffect(() => {
+    console.log("DuplicateOrdersPage useEffect");
     loadDuplicateOrders();
   }, []);
 
@@ -181,9 +200,10 @@ const DuplicateOrdersPage: React.FC = () => {
                       <Chip
                         label={order.situacaoVenda}
                         color={
-                          order.situacaoVenda === 'paid' ? 'success' :
-                          order.situacaoVenda === 'partially_paid' ? 'info' :
-                          order.situacaoVenda === 'cancelled' ? 'error' :
+                          order.situacaoVenda === 'Pago' ? 'success' :
+                          order.situacaoVenda === 'Parcialmente Pago' ? 'info' :
+                          order.situacaoVenda === 'Possíveis Duplicados' ? 'warning' :
+                          order.situacaoVenda === 'Cancelado' ? 'error' :
                           'default'
                         }
                         size="small"
@@ -212,6 +232,37 @@ const DuplicateOrdersPage: React.FC = () => {
           </TableContainer>
         </Paper>
       ))}
+
+      {/* Debug section */}
+      {process.env.NODE_ENV === 'development' && (
+        <Paper sx={{ mt: 4, p: 2 }}>
+          <Typography variant="h6">Debug Information</Typography>
+          <Box sx={{ mt: 1 }}>
+            <Typography variant="body2">
+              REACT_APP_MOCK_API: {process.env.REACT_APP_MOCK_API === 'true' ? 'true' : 'false'}
+            </Typography>
+            <Typography variant="body2">
+              Total duplicate orders: {duplicateOrders.length}
+            </Typography>
+            <Typography variant="body2">
+              Grouped by phone: {Object.keys(groupedOrders).length} groups
+            </Typography>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              sx={{ mt: 1 }}
+              onClick={() => {
+                // Test to add a duplicate order to localStorage
+                const savedOrders = localStorage.getItem('orders');
+                const orders = savedOrders ? JSON.parse(savedOrders) : [];
+                console.log("Current orders in localStorage:", orders.length);
+              }}
+            >
+              Check localStorage
+            </Button>
+          </Box>
+        </Paper>
+      )}
     </Box>
   );
 };

@@ -9,14 +9,17 @@ import {
   KitSale, KitSaleCreate,
   ProductStockStatus, SalesAnalytics, InventorySummary
 } from '../types/NutraTypes';
-import AuthService from './AuthService';
+// AuthService import removed
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 const NUTRA_API = `${API_URL}/nutra`;
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
-  const token = AuthService.getAccessToken();
+  // Get token from localStorage
+  const token = localStorage.getItem('auth_tokens') ?
+    JSON.parse(localStorage.getItem('auth_tokens') || '{}').access_token :
+    null;
   return {
     headers: {
       Authorization: `Bearer ${token}`

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpar Dados do Sistema</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        button {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #c0392b;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #eee;
+        }
+        .result {
+            background-color: #f5f7ff;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #3f51b5;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #e8f5e9;
+            border-left-color: #4caf50;
+        }
+        .warning {
+            background-color: #fff8e1;
+            border-left-color: #ffc107;
+        }
+        .danger {
+            background-color: #ffebee;
+            border-left-color: #f44336;
+        }
+        .checkbox-container {
+            margin: 15px 0;
+        }
+        .checkbox-container label {
+            display: block;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Limpar Dados do Sistema</h1>
+    
+    <div class="card danger">
+        <h2>⚠️ Atenção</h2>
+        <p>Esta ferramenta permite limpar dados armazenados no navegador. Esta ação é <strong>irreversível</strong>.</p>
+        <p>Selecione os dados que deseja limpar:</p>
+        
+        <div class="checkbox-container">
+            <label>
+                <input type="checkbox" id="chk-users" checked> Usuários (users)
+            </label>
+            <label>
+                <input type="checkbox" id="chk-default-users" checked> Usuários padrão (default_users)
+            </label>
+            <label>
+                <input type="checkbox" id="chk-mock-users" checked> Usuários de teste (mockUsers)
+            </label>
+            <label>
+                <input type="checkbox" id="chk-orders"> Pedidos (orders)
+            </label>
+            <label>
+                <input type="checkbox" id="chk-auth-tokens"> Tokens de autenticação (authTokens)
+            </label>
+            <label>
+                <input type="checkbox" id="chk-user-info"> Informações do usuário atual (userInfo)
+            </label>
+            <label>
+                <input type="checkbox" id="chk-all"> <strong>Limpar TODOS os dados</strong>
+            </label>
+        </div>
+        
+        <button id="btn-clear">Limpar Dados Selecionados</button>
+    </div>
+    
+    <div id="result" class="result" style="display: none;"></div>
+    
+    <script>
+        // Elementos da UI
+        const chkUsers = document.getElementById('chk-users');
+        const chkDefaultUsers = document.getElementById('chk-default-users');
+        const chkMockUsers = document.getElementById('chk-mock-users');
+        const chkOrders = document.getElementById('chk-orders');
+        const chkAuthTokens = document.getElementById('chk-auth-tokens');
+        const chkUserInfo = document.getElementById('chk-user-info');
+        const chkAll = document.getElementById('chk-all');
+        const btnClear = document.getElementById('btn-clear');
+        const resultElement = document.getElementById('result');
+        
+        // Evento para o checkbox "Limpar TODOS os dados"
+        chkAll.addEventListener('change', function() {
+            const checked = this.checked;
+            chkUsers.checked = checked;
+            chkDefaultUsers.checked = checked;
+            chkMockUsers.checked = checked;
+            chkOrders.checked = checked;
+            chkAuthTokens.checked = checked;
+            chkUserInfo.checked = checked;
+        });
+        
+        // Evento para o botão de limpar
+        btnClear.addEventListener('click', function() {
+            // Verificar se pelo menos um item está selecionado
+            if (!chkUsers.checked && !chkDefaultUsers.checked && !chkMockUsers.checked && 
+                !chkOrders.checked && !chkAuthTokens.checked && !chkUserInfo.checked && !chkAll.checked) {
+                showResult('Por favor, selecione pelo menos um tipo de dado para limpar.', 'warning');
+                return;
+            }
+            
+            // Confirmar a ação
+            if (!confirm('Tem certeza que deseja limpar os dados selecionados? Esta ação não pode ser desfeita.')) {
+                return;
+            }
+            
+            // Limpar dados
+            const cleared = [];
+            
+            if (chkAll.checked) {
+                // Limpar tudo
+                localStorage.clear();
+                cleared.push('TODOS OS DADOS');
+            } else {
+                // Limpar itens selecionados
+                if (chkUsers.checked) {
+                    localStorage.removeItem('users');
+                    cleared.push('Usuários (users)');
+                }
+                
+                if (chkDefaultUsers.checked) {
+                    localStorage.removeItem('default_users');
+                    cleared.push('Usuários padrão (default_users)');
+                }
+                
+                if (chkMockUsers.checked) {
+                    localStorage.removeItem('mockUsers');
+                    cleared.push('Usuários de teste (mockUsers)');
+                }
+                
+                if (chkOrders.checked) {
+                    localStorage.removeItem('orders');
+                    cleared.push('Pedidos (orders)');
+                }
+                
+                if (chkAuthTokens.checked) {
+                    localStorage.removeItem('authTokens');
+                    cleared.push('Tokens de autenticação (authTokens)');
+                }
+                
+                if (chkUserInfo.checked) {
+                    localStorage.removeItem('userInfo');
+                    cleared.push('Informações do usuário atual (userInfo)');
+                }
+            }
+            
+            // Mostrar resultado
+            if (cleared.length > 0) {
+                showResult(`Os seguintes dados foram limpos com sucesso:<br><ul>${cleared.map(item => `<li>${item}</li>`).join('')}</ul>`, 'success');
+            } else {
+                showResult('Nenhum dado foi limpo.', 'warning');
+            }
+        });
+        
+        // Função para mostrar resultado
+        function showResult(message, type = '') {
+            resultElement.style.display = 'block';
+            resultElement.className = 'result';
+            
+            if (type) {
+                resultElement.classList.add(type);
+            }
+            
+            resultElement.innerHTML = message;
+        }
+    </script>
+</body>
+</html>

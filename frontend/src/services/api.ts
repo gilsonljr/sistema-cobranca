@@ -18,7 +18,10 @@ const api = axios.create({
 
 // Interceptor para adicionar token de autenticação se disponível
 api.interceptors.request.use(config => {
-  const token = AuthService.getAccessToken();
+  // Get token from AuthService
+  const token = localStorage.getItem('auth_tokens') ?
+    JSON.parse(localStorage.getItem('auth_tokens') || '{}').access_token :
+    null;
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -40,14 +43,14 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        // Tentar obter um novo token usando o refresh token
-        const tokens = await AuthService.refreshToken();
+        // Simplified token refresh for compatibility
+        console.log('Token expired, redirecting to login');
 
-        if (tokens && tokens.access_token) {
-          // Atualizar o cabeçalho da requisição original e reenviar
-          originalRequest.headers.Authorization = `Bearer ${tokens.access_token}`;
-          return axios(originalRequest);
-        }
+        // Logout and redirect to login
+        AuthService.logout();
+        window.location.href = '/login';
+
+        return Promise.reject(error);
       } catch (refreshError) {
         console.error('Erro ao atualizar token:', refreshError);
 

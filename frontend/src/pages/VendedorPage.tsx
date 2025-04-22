@@ -45,6 +45,12 @@ import { Offer } from '../types/Product';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { SelectChangeEvent } from '@mui/material/Select';
+import CPFInput from '../components/inputs/CPFInput';
+import CEPInput from '../components/inputs/CEPInput';
+import { validateCPF as isValidCPF } from '../utils/brazilianUtils';
+import zapConfigService from '../services/ZapConfigService';
+import { ZapConfig } from '../types/Zap';
+import { useLocation } from 'react-router-dom';
 
 interface VendedorPageProps {
   orders: Order[];
@@ -52,6 +58,7 @@ interface VendedorPageProps {
 }
 
 const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) => {
+  const location = useLocation();
   // Estado para o usuário atual
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -78,6 +85,7 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
     complementoDestinatario: '',
     bairroDestinatario: '',
     numeroEnderecoDestinatario: '',
+    zapId: '',
   });
 
   // Estado para ofertas disponíveis
@@ -105,25 +113,65 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
   // Estado para verificação de duplicidade
   const [duplicateStatus, setDuplicateStatus] = useState<'duplicate' | 'unique' | 'checking' | null>(null);
 
+  // Add state for Zap configurations
+  const [zapConfigs, setZapConfigs] = useState<ZapConfig[]>([]);
+
   // Carregar usuário atual e ofertas disponíveis
   useEffect(() => {
-    // Carregar usuário
-    const userInfo = localStorage.getItem('userInfo');
+    // Carregar usuário usando AuthService
+    const userInfo = AuthService.getUserInfo();
     if (userInfo) {
-      setCurrentUser(JSON.parse(userInfo));
+      setCurrentUser(userInfo);
     }
 
     // Carregar ofertas disponíveis
     const offers = ProductService.getAllActiveOffers();
     setAvailableOffers(offers);
+
+    // Load Zap configurations on component mount
+    const activeConfigs = zapConfigService.getActiveConfigs();
+    setZapConfigs(activeConfigs);
+
+    // Check if we should open the new order dialog automatically
+    if (location.state && location.state.openNewOrderDialog) {
+      handleOpenNewOrderDialog();
+    }
+
+    // Listen for custom event to open the dialog
+    const handleOpenDialogEvent = () => {
+      handleOpenNewOrderDialog();
+    };
+
+    window.addEventListener('open-new-order-dialog', handleOpenDialogEvent);
+
+    // Clean up event listener
+    return () => {
+      window.removeEventListener('open-new-order-dialog', handleOpenDialogEvent);
+    };
   }, []);
 
   // Filtrar pedidos do vendedor atual
   useEffect(() => {
     if (currentUser && orders) {
-      const vendedorOrders = orders.filter(order =>
-        order.vendedor.toLowerCase() === currentUser.fullName.toLowerCase()
-      );
+      console.log('Filtrando pedidos para vendedor:', currentUser.full_name);
+      console.log('Total de pedidos:', orders.length);
+
+      const vendedorOrders = orders.filter(order => {
+        // Verificar se o vendedor está definido
+        if (!order.vendedor) return false;
+
+        // Comparar ignorando case e espaços extras
+        const vendedorNormalizado = order.vendedor.toLowerCase().trim();
+        const userNameNormalizado = currentUser.full_name.toLowerCase().trim();
+
+        // Verificar se o nome do vendedor contém o nome do usuário ou vice-versa
+        const isMatch = vendedorNormalizado.includes(userNameNormalizado) ||
+                       userNameNormalizado.includes(vendedorNormalizado);
+
+        return isMatch;
+      });
+
+      console.log('Pedidos filtrados para o vendedor:', vendedorOrders.length);
       setFilteredOrders(vendedorOrders);
     }
   }, [currentUser, orders]);
@@ -131,9 +179,16 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
   // Função para filtrar pedidos com base na busca
   useEffect(() => {
     if (currentUser && orders) {
-      const vendedorOrders = orders.filter(order =>
-        order.vendedor.toLowerCase() === currentUser.fullName.toLowerCase()
-      );
+      // Usar a mesma lógica de filtragem de vendedor que usamos acima
+      const vendedorOrders = orders.filter(order => {
+        if (!order.vendedor) return false;
+
+        const vendedorNormalizado = order.vendedor.toLowerCase().trim();
+        const userNameNormalizado = currentUser.full_name.toLowerCase().trim();
+
+        return vendedorNormalizado.includes(userNameNormalizado) ||
+               userNameNormalizado.includes(vendedorNormalizado);
+      });
 
       if (searchTerm.trim() === '') {
         setFilteredOrders(vendedorOrders);
@@ -143,7 +198,7 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
           order.cliente.toLowerCase().includes(searchTermLower) ||
           order.idVenda.toLowerCase().includes(searchTermLower) ||
           order.telefone.toLowerCase().includes(searchTermLower) ||
-          order.documentoCliente.toLowerCase().includes(searchTermLower)
+          (order.documentoCliente && order.documentoCliente.toLowerCase().includes(searchTermLower))
         );
         setFilteredOrders(filtered);
       }
@@ -165,6 +220,7 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
       complementoDestinatario: '',
       bairroDestinatario: '',
       numeroEnderecoDestinatario: '',
+      zapId: '',
     });
     setFormErrors({});
     setCpfStatus(null);
@@ -238,34 +294,43 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
 
   // Função para validar CPF
   const validateCPF = async (cpf: string) => {
-    // Simulação de validação de CPF
-    setCpfStatus('checking');
+    // Validar CPF utilizando a função real de validação
+    const cleanCPF = cpf.replace(/[^\d]/g, '');
+    const isValid = isValidCPF(cleanCPF);
 
-    try {
-      // Aqui seria a chamada para a API de validação de CPF
-      // Por enquanto, vamos simular com um timeout
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    setCpfStatus(isValid ? 'valid' : 'invalid');
 
-      // Validação básica (apenas para demonstração)
-      const isValid = cpf.length === 11 && /^\d+$/.test(cpf);
-      setCpfStatus(isValid ? 'valid' : 'invalid');
-
-      if (!isValid) {
-        setFormErrors(prev => ({
-          ...prev,
-          documentoCliente: 'CPF inválido'
-        }));
-      }
-
-      return isValid;
-    } catch (error) {
-      console.error('Erro ao validar CPF:', error);
-      setCpfStatus('invalid');
+    if (!isValid) {
       setFormErrors(prev => ({
         ...prev,
-        documentoCliente: 'Erro ao validar CPF'
+        documentoCliente: 'CPF inválido'
       }));
-      return false;
+    }
+
+    return isValid;
+  };
+
+  // Função para lidar com alterações no CPF
+  const handleCPFChange = (value: string, isValid: boolean) => {
+    setNewOrderForm(prev => ({
+      ...prev,
+      documentoCliente: value
+    }));
+
+    // Atualizar status de validação do CPF
+    setCpfStatus(isValid ? 'valid' : 'invalid');
+
+    // Limpar erro caso o CPF seja válido
+    if (isValid) {
+      setFormErrors(prev => ({
+        ...prev,
+        documentoCliente: ''
+      }));
+    } else if (value.replace(/[^\d]/g, '').length === 11) {
+      setFormErrors(prev => ({
+        ...prev,
+        documentoCliente: 'CPF inválido'
+      }));
     }
   };
 
@@ -320,6 +385,8 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
 
     if (!newOrderForm.documentoCliente.trim()) {
       errors.documentoCliente = 'CPF é obrigatório';
+    } else if (!isValidCPF(newOrderForm.documentoCliente)) {
+      errors.documentoCliente = 'CPF inválido';
     }
 
     if (!newOrderForm.ofertaId) {
@@ -355,8 +422,50 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
       errors.numeroEnderecoDestinatario = 'Número é obrigatório';
     }
 
+    // Validate Zap
+    if (!newOrderForm.zapId) {
+      errors.zapId = 'Zap é obrigatório';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // Função para lidar com endereço encontrado pelo CEP
+  const handleAddressFound = (address: any) => {
+    setNewOrderForm(prev => ({
+      ...prev,
+      estadoDestinatario: address.uf || prev.estadoDestinatario,
+      cidadeDestinatario: address.localidade || prev.cidadeDestinatario,
+      ruaDestinatario: address.logradouro || prev.ruaDestinatario,
+      bairroDestinatario: address.bairro || prev.bairroDestinatario,
+      complementoDestinatario: address.complemento || prev.complementoDestinatario
+    }));
+
+    // Limpar erros dos campos preenchidos automaticamente
+    const clearedErrors = { ...formErrors };
+    if (address.uf) delete clearedErrors.estadoDestinatario;
+    if (address.localidade) delete clearedErrors.cidadeDestinatario;
+    if (address.logradouro) delete clearedErrors.ruaDestinatario;
+    if (address.bairro) delete clearedErrors.bairroDestinatario;
+
+    setFormErrors(clearedErrors);
+  };
+
+  // Função para lidar com alterações no CEP
+  const handleCEPChange = (value: string) => {
+    setNewOrderForm(prev => ({
+      ...prev,
+      cepDestinatario: value
+    }));
+
+    // Limpar erro do CEP quando o usuário digita
+    if (formErrors.cepDestinatario) {
+      setFormErrors(prev => ({
+        ...prev,
+        cepDestinatario: ''
+      }));
+    }
   };
 
   // Função para criar um novo pedido
@@ -371,17 +480,14 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
       return;
     }
 
-    // Validar CPF
-    if (cpfStatus !== 'valid') {
-      const isValid = await validateCPF(newOrderForm.documentoCliente);
-      if (!isValid) {
-        setNotification({
-          open: true,
-          message: 'CPF inválido',
-          severity: 'error',
-        });
-        return;
-      }
+    // Validar CPF mais uma vez para garantir
+    if (!isValidCPF(newOrderForm.documentoCliente)) {
+      setNotification({
+        open: true,
+        message: 'CPF inválido',
+        severity: 'error',
+      });
+      return;
     }
 
     setLoading(true);
@@ -428,6 +534,13 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
       return;
     }
 
+    // Get selected Zap configuration
+    const selectedZap = zapConfigs.find(config => config.id === newOrderForm.zapId);
+
+    // Get the most up-to-date user info directly from AuthService
+    const userInfo = AuthService.getUserInfo();
+    console.log('Criando pedido com vendedor:', userInfo?.full_name);
+
     // Criar novo pedido
     const newOrder: Order = {
       idVenda: newId,
@@ -438,16 +551,16 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
       oferta: selectedOfferInfo.displayName,
       valorVenda: selectedOfferInfo.price,
       valorRecebido: 0,
-      status: isDuplicate ? OrderStatus.PENDING : OrderStatus.PENDING,
-      situacaoVenda: isDuplicate ? 'Aguardando Aprovação' : 'Pendente',
+      status: isDuplicate ? OrderStatus.PENDING : OrderStatus.LIBERACAO,
+      situacaoVenda: isDuplicate ? 'Possíveis Duplicados' : 'Liberação',
       historico: '',
       ultimaAtualizacao: format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR }),
       codigoRastreio: '',
       statusCorreios: '',
       atualizacaoCorreios: '',
-      vendedor: currentUser?.fullName || '',
+      vendedor: userInfo?.full_name || 'Usuário não identificado',
       operador: '',
-      zap: newOrderForm.telefone,
+      zap: selectedZap ? selectedZap.name : newOrderForm.telefone,
       estadoDestinatario: newOrderForm.estadoDestinatario,
       cidadeDestinatario: newOrderForm.cidadeDestinatario,
       ruaDestinatario: newOrderForm.ruaDestinatario,
@@ -470,6 +583,9 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
       billingHistory: []
     };
 
+    // Log the order to help with debugging
+    console.log('Creating new order with status:', newOrder.situacaoVenda);
+
     // Adicionar pedido à lista
     const updatedOrders = [...orders, newOrder];
     onOrdersUpdate(updatedOrders);
@@ -483,6 +599,11 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
         : 'Pedido criado com sucesso',
       severity: isDuplicate ? 'warning' : 'success',
     });
+
+    // Dispatch event to update the sidebar's status counts
+    window.dispatchEvent(new CustomEvent('order-status-updated', {
+      detail: { status: newOrder.situacaoVenda }
+    }));
   };
 
   // Função para fechar notificação
@@ -596,7 +717,7 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
                       color={
                         order.situacaoVenda === 'Pago' ? 'success' :
                         order.situacaoVenda === 'Parcialmente Pago' ? 'info' :
-                        order.situacaoVenda === 'Aguardando Aprovação' ? 'warning' :
+                        order.situacaoVenda === 'Liberação' ? 'warning' :
                         order.situacaoVenda === 'Cancelado' ? 'error' :
                         'default'
                       }
@@ -680,12 +801,11 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
 
             <Grid item xs={12} md={6}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TextField
+                <CPFInput
                   fullWidth
                   label="CPF"
-                  name="documentoCliente"
                   value={newOrderForm.documentoCliente}
-                  onChange={handleFormChange}
+                  onChange={handleCPFChange}
                   error={!!formErrors.documentoCliente}
                   helperText={formErrors.documentoCliente}
                   required
@@ -704,7 +824,7 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
               </Typography>
             </Grid>
 
-            <Grid item xs={12} md={8}>
+            <Grid item xs={12} md={6}>
               <FormControl fullWidth error={!!formErrors.ofertaId} required>
                 <InputLabel id="oferta-label">Oferta/Produto</InputLabel>
                 <Select
@@ -728,7 +848,31 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth error={!!formErrors.zapId} required>
+                <InputLabel id="zap-label">WhatsApp (Zap)</InputLabel>
+                <Select
+                  labelId="zap-label"
+                  name="zapId"
+                  value={newOrderForm.zapId}
+                  onChange={handleSelectChange}
+                  label="WhatsApp (Zap)"
+                >
+                  {zapConfigs.map((config) => (
+                    <MenuItem key={config.id} value={config.id}>
+                      {config.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {formErrors.zapId && (
+                  <Typography variant="caption" color="error">
+                    {formErrors.zapId}
+                  </Typography>
+                )}
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
                 label="Valor da Venda"
@@ -762,12 +906,12 @@ const VendedorPage: React.FC<VendedorPageProps> = ({ orders, onOrdersUpdate }) =
             </Grid>
 
             <Grid item xs={12} md={4}>
-              <TextField
+              <CEPInput
                 fullWidth
                 label="CEP"
-                name="cepDestinatario"
                 value={newOrderForm.cepDestinatario}
-                onChange={handleFormChange}
+                onChange={handleCEPChange}
+                onAddressFound={handleAddressFound}
                 error={!!formErrors.cepDestinatario}
                 helperText={formErrors.cepDestinatario}
                 required

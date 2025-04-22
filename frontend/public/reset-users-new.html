@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resetar Usuários (Nova Versão)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .danger {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button.danger {
+            background-color: #dc3545;
+            border-left: none;
+            padding: 10px 15px;
+        }
+        button.success {
+            background-color: #28a745;
+            border-left: none;
+            padding: 10px 15px;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .log-container {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-entry.info {
+            color: #17a2b8;
+        }
+        .log-entry.success {
+            color: #28a745;
+        }
+        .log-entry.error {
+            color: #dc3545;
+        }
+        .log-entry.warning {
+            color: #ffc107;
+        }
+        .user-list {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .user-list table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .user-list th, .user-list td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .user-list th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .user-list tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .user-list tr:hover {
+            background-color: #f5f5f5;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Resetar Usuários (Nova Versão)</h1>
+        
+        <div class="danger">
+            <h2>⚠️ ATENÇÃO: OPERAÇÃO CRÍTICA</h2>
+            <p>Esta ferramenta irá <strong>REMOVER TODOS</strong> os usuários do sistema, exceto o usuário Admin.</p>
+            <p>Esta ação é <strong>IRREVERSÍVEL</strong> e afetará todas as áreas do sistema.</p>
+        </div>
+        
+        <div class="info">
+            <h3>O que esta ferramenta faz:</h3>
+            <ul>
+                <li>Utiliza o novo <strong>UserStore</strong> para gerenciar usuários</li>
+                <li>Remove todos os usuários de <strong>TODAS</strong> as áreas de armazenamento</li>
+                <li>Mantém apenas o usuário Admin com todas as permissões</li>
+                <li>Sincroniza todos os armazenamentos para garantir consistência</li>
+            </ul>
+        </div>
+        
+        <div class="actions">
+            <button id="btn-reset-users" class="danger">Resetar Todos os Usuários (Manter Admin)</button>
+            <button id="btn-show-users" class="success">Mostrar Usuários Atuais</button>
+            <button id="btn-go-back" onclick="window.history.back()">Voltar</button>
+            <button id="btn-go-home" onclick="window.location.href='/'">Ir para Home</button>
+        </div>
+    </div>
+    
+    <div id="log-container" class="log-container">
+        <div class="log-entry info">Aguardando ação...</div>
+    </div>
+    
+    <div id="user-container" class="container hidden">
+        <h2>Usuários no Sistema</h2>
+        <div id="user-list" class="user-list">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nome</th>
+                        <th>Email</th>
+                        <th>Papéis</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table-body">
+                    <!-- Usuários serão inseridos aqui -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        // Elementos da UI
+        const btnResetUsers = document.getElementById('btn-reset-users');
+        const btnShowUsers = document.getElementById('btn-show-users');
+        const btnGoBack = document.getElementById('btn-go-back');
+        const btnGoHome = document.getElementById('btn-go-home');
+        const logContainer = document.getElementById('log-container');
+        const userContainer = document.getElementById('user-container');
+        const userTableBody = document.getElementById('user-table-body');
+        
+        // Função para adicionar log
+        function addLog(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = message;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Classe UserStore (versão simplificada para uso direto)
+        class UserStore {
+            static STORAGE_KEY = 'system_users';
+            
+            static DEFAULT_ADMIN = {
+                id: 1,
+                nome: 'Admin',
+                email: 'admin@sistema.com',
+                papeis: ['admin'],
+                permissoes: ['criar_usuario', 'editar_usuario', 'excluir_usuario', 'ver_relatorios', 'editar_configuracoes', 'ver_todos_pedidos', 'editar_pedidos'],
+                ativo: true
+            };
+            
+            static getUsers() {
+                try {
+                    const storedUsers = localStorage.getItem(this.STORAGE_KEY);
+                    return storedUsers ? JSON.parse(storedUsers) : [this.DEFAULT_ADMIN];
+                } catch (error) {
+                    console.error('UserStore: Erro ao obter usuários', error);
+                    return [this.DEFAULT_ADMIN];
+                }
+            }
+            
+            static saveUsers(users) {
+                try {
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(users));
+                    this.syncWithOtherStorages(users);
+                } catch (error) {
+                    console.error('UserStore: Erro ao salvar usuários', error);
+                }
+            }
+            
+            static resetToAdmin() {
+                this.saveUsers([this.DEFAULT_ADMIN]);
+                return true;
+            }
+            
+            static syncWithOtherStorages(users) {
+                try {
+                    // 1. Sincronizar com 'users' (armazenamento antigo)
+                    localStorage.setItem('users', JSON.stringify(users));
+                    
+                    // 2. Sincronizar com 'default_users'
+                    const defaultUsers = {};
+                    users.forEach(user => {
+                        // Mapear papel para role
+                        let role = 'user';
+                        if (user.papeis.includes('admin')) role = 'admin';
+                        else if (user.papeis.includes('supervisor')) role = 'supervisor';
+                        else if (user.papeis.includes('collector') || user.papeis.includes('operador')) role = 'collector';
+                        else if (user.papeis.includes('seller') || user.papeis.includes('vendedor')) role = 'seller';
+                        
+                        defaultUsers[user.email] = {
+                            id: user.id,
+                            email: user.email,
+                            fullName: user.nome,
+                            role: role,
+                            password: user.email === 'admin@sistema.com' ? 'admin123' : 'senha123'
+                        };
+                    });
+                    localStorage.setItem('default_users', JSON.stringify(defaultUsers));
+                    
+                    // 3. Sincronizar com 'mockUsers'
+                    const mockUsers = users.map(user => {
+                        // Determinar perfil
+                        let perfil = 'Usuário';
+                        if (user.papeis.includes('admin')) perfil = 'Administrador';
+                        else if (user.papeis.includes('supervisor')) perfil = 'Supervisor';
+                        else if (user.papeis.includes('collector') || user.papeis.includes('operador')) perfil = 'Operador';
+                        else if (user.papeis.includes('seller') || user.papeis.includes('vendedor')) perfil = 'Vendedor';
+                        
+                        return {
+                            id: user.id,
+                            nome: user.nome,
+                            email: user.email,
+                            perfil: perfil,
+                            permissoes: user.permissoes,
+                            ativo: user.ativo
+                        };
+                    });
+                    localStorage.setItem('mockUsers', JSON.stringify(mockUsers));
+                    
+                    // 4. Sincronizar senhas
+                    const passwords = {};
+                    users.forEach(user => {
+                        passwords[user.email] = user.email === 'admin@sistema.com' ? 'admin123' : 'senha123';
+                    });
+                    localStorage.setItem('user_passwords', JSON.stringify(passwords));
+                    
+                    return true;
+                } catch (error) {
+                    console.error('UserStore: Erro ao sincronizar com outros armazenamentos', error);
+                    return false;
+                }
+            }
+        }
+        
+        // Função para mostrar usuários
+        function showUsers() {
+            try {
+                addLog('Coletando informações de usuários...', 'info');
+                userContainer.classList.remove('hidden');
+                
+                // Limpar tabela
+                userTableBody.innerHTML = '';
+                
+                // Obter usuários do UserStore
+                const users = UserStore.getUsers();
+                
+                if (users.length === 0) {
+                    addLog('Nenhum usuário encontrado!', 'warning');
+                    userTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Nenhum usuário encontrado</td></tr>';
+                    return;
+                }
+                
+                // Adicionar usuários à tabela
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    
+                    // ID
+                    const idCell = document.createElement('td');
+                    idCell.textContent = user.id;
+                    row.appendChild(idCell);
+                    
+                    // Nome
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = user.nome;
+                    row.appendChild(nameCell);
+                    
+                    // Email
+                    const emailCell = document.createElement('td');
+                    emailCell.textContent = user.email;
+                    row.appendChild(emailCell);
+                    
+                    // Papéis
+                    const rolesCell = document.createElement('td');
+                    rolesCell.textContent = user.papeis ? user.papeis.join(', ') : '';
+                    row.appendChild(rolesCell);
+                    
+                    // Status
+                    const statusCell = document.createElement('td');
+                    statusCell.textContent = user.ativo ? 'Ativo' : 'Inativo';
+                    statusCell.style.color = user.ativo ? '#28a745' : '#dc3545';
+                    row.appendChild(statusCell);
+                    
+                    userTableBody.appendChild(row);
+                });
+                
+                addLog(`${users.length} usuários encontrados.`, 'success');
+                
+            } catch (error) {
+                addLog(`Erro ao mostrar usuários: ${error.message}`, 'error');
+                console.error('Erro ao mostrar usuários:', error);
+            }
+        }
+        
+        // Função para resetar todos os usuários
+        function resetAllUsers() {
+            try {
+                // Confirmar antes de resetar
+                if (!confirm('ATENÇÃO: Esta ação irá REMOVER TODOS os usuários do sistema, exceto o usuário Admin. Esta ação NÃO pode ser desfeita. Deseja continuar?')) {
+                    addLog('Operação cancelada pelo usuário.', 'info');
+                    return;
+                }
+                
+                // Pedir confirmação adicional
+                if (!confirm('Confirme novamente: Todos os usuários serão REMOVIDOS. Apenas o Admin permanecerá. Tem certeza absoluta?')) {
+                    addLog('Operação cancelada na confirmação secundária.', 'info');
+                    return;
+                }
+                
+                addLog('Iniciando reset de usuários...', 'info');
+                
+                // Obter contagem atual de usuários
+                const currentUsers = UserStore.getUsers();
+                const userCount = currentUsers.length;
+                
+                // Resetar para apenas o admin
+                const result = UserStore.resetToAdmin();
+                
+                if (result) {
+                    addLog(`Reset concluído! ${userCount - 1} usuários foram removidos.`, 'success');
+                    addLog('Apenas o usuário Admin permanece no sistema.', 'success');
+                    
+                    // Disparar eventos para notificar a aplicação
+                    window.dispatchEvent(new CustomEvent('user-data-reset', { 
+                        detail: { users: [UserStore.DEFAULT_ADMIN] } 
+                    }));
+                    window.dispatchEvent(new CustomEvent('user-list-reset'));
+                    
+                    // Mostrar usuários atualizados
+                    showUsers();
+                    
+                    // Forçar recarga da página após 3 segundos
+                    addLog('A página será recarregada em 3 segundos para aplicar todas as alterações...', 'info');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    addLog('Erro durante o reset de usuários.', 'error');
+                }
+                
+            } catch (error) {
+                addLog(`Erro durante o reset: ${error.message}`, 'error');
+                console.error('Erro ao resetar usuários:', error);
+            }
+        }
+        
+        // Adicionar event listeners
+        btnResetUsers.addEventListener('click', resetAllUsers);
+        btnShowUsers.addEventListener('click', showUsers);
+        
+        // Mostrar mensagem inicial
+        addLog('Ferramenta de reset de usuários carregada.', 'info');
+        addLog('Esta ferramenta utiliza o novo UserStore para gerenciar usuários.', 'info');
+        addLog('Use o botão "Mostrar Usuários Atuais" para ver os usuários existentes.', 'info');
+        addLog('Use o botão "Resetar Todos os Usuários" para remover todos os usuários exceto o Admin.', 'warning');
+    </script>
+</body>
+</html>

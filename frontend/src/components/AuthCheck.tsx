@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import AuthService from '../services/AuthService';
+import UnifiedAuthService from '../services/UnifiedAuthService';
 
 interface AuthCheckProps {
   children: React.ReactNode;
@@ -12,7 +12,7 @@ const AuthCheck: React.FC<AuthCheckProps> = ({ children }) => {
   useEffect(() => {
     // Verificar se o usuário está autenticado
     const checkAuth = () => {
-      const isAuth = AuthService.isAuthenticated();
+      const isAuth = UnifiedAuthService.isAuthenticated();
       console.log('AuthCheck - Verificando autenticação:', isAuth);
       setIsAuthenticated(isAuth);
     };

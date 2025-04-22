@@ -17,8 +17,8 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'
 
 interface AnalyticsDashboardProps {
   orders: Order[];
-  startDate?: Date;
-  endDate?: Date;
+  startDate?: Date | null;
+  endDate?: Date | null;
 }
 
 // Função para renderizar o label do gráfico de pizza

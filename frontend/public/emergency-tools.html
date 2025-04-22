@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ferramentas de Emergência</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .danger {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .tool-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .tool-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .tool-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .tool-card p {
+            color: #666;
+            margin-bottom: 15px;
+        }
+        .tool-card .actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 15px;
+            border-radius: 4px;
+            text-decoration: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn-primary {
+            background-color: #007bff;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-info {
+            background-color: #17a2b8;
+        }
+        .btn-purple {
+            background-color: #9c27b0;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Ferramentas de Emergência</h1>
+            <a href="/" class="btn btn-primary">Voltar para o Sistema</a>
+        </div>
+
+        <div class="warning">
+            <h2>⚠️ ATENÇÃO</h2>
+            <p>Estas ferramentas são para uso em situações de emergência e podem causar perda de dados se usadas incorretamente.</p>
+            <p>Use apenas quando necessário e com extrema cautela.</p>
+        </div>
+
+        <h2>Ferramentas Disponíveis</h2>
+
+        <div class="tool-card">
+            <h3>Correção de Emergência</h3>
+            <p>Ferramenta principal para correções de emergência no sistema. Permite aplicar correções básicas, restaurar dados completos, limpar o sistema e mais.</p>
+            <div class="actions">
+                <a href="emergency-fix.html" class="btn btn-primary">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Limpar Apenas Usuários</h3>
+            <p>Remove todos os usuários do sistema, exceto o administrador. Útil quando há problemas com usuários específicos.</p>
+            <div class="actions">
+                <a href="clear-users.html" class="btn btn-warning">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Redefinir Todos os Usuários</h3>
+            <p>Ferramenta avançada para redefinir completamente todos os usuários do sistema, mantendo apenas o admin. Garante sincronização em todas as áreas de armazenamento.</p>
+            <div class="actions">
+                <a href="reset-all-users.html" class="btn btn-purple">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Redefinição Direta de Usuários</h3>
+            <p>Ferramenta de emergência para redefinição direta de todos os usuários. Use esta ferramenta quando as outras opções não estiverem funcionando corretamente.</p>
+            <div class="actions">
+                <a href="direct-user-reset.html" class="btn" style="background-color: #e91e63;">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Execução de Script de Limpeza</h3>
+            <p>Ferramenta de último recurso que executa um script JavaScript diretamente para limpar todos os usuários. Use apenas se nenhuma outra opção funcionar.</p>
+            <div class="actions">
+                <a href="execute-clear-users.html" class="btn" style="background-color: #795548;">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Corrigir Página de Usuários</h3>
+            <p>Ferramenta para corrigir a página de usuários (/users) quando ela não estiver mostrando os dados corretos após limpar os usuários.</p>
+            <div class="actions">
+                <a href="fix-users-page.html" class="btn" style="background-color: #009688;">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Resetar Usuários (Nova Versão)</h3>
+            <p>Ferramenta que utiliza o novo UserStore para resetar todos os usuários. Esta é a versão mais recente e recomendada.</p>
+            <div class="actions">
+                <a href="reset-users-new.html" class="btn" style="background-color: #3f51b5;">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Executar Script de Reset</h3>
+            <p>Ferramenta que executa diretamente um script JavaScript para resetar todos os usuários usando o novo UserStore.</p>
+            <div class="actions">
+                <a href="execute-reset-users.html" class="btn" style="background-color: #673ab7;">Acessar</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h3>Sistema Unificado de Usuários</h3>
+            <p>Ferramenta que utiliza o novo UserManager unificado para resetar todos os usuários. Esta é a versão mais avançada e recomendada.</p>
+            <div class="actions">
+                <a href="unified-reset-users.html" class="btn" style="background-color: #2196f3;">Acessar</a>
+            </div>
+        </div>
+
+        <div class="info">
+            <h3>Informações Importantes</h3>
+            <ul>
+                <li>Todas as ferramentas mantêm o usuário admin com email <strong>admin@sistema.com</strong> e senha <strong>admin123</strong></li>
+                <li>Após usar qualquer ferramenta, é recomendado fazer login novamente no sistema</li>
+                <li>Em caso de problemas, entre em contato com o suporte técnico</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Verificar se o usuário está logado
+        function checkLogin() {
+            const userInfo = localStorage.getItem('userInfo');
+            if (!userInfo) {
+                console.log('Usuário não está logado');
+            } else {
+                try {
+                    const user = JSON.parse(userInfo);
+                    console.log(`Usuário logado: ${user.fullName} (${user.email})`);
+                } catch (error) {
+                    console.error('Erro ao verificar login:', error);
+                }
+            }
+        }
+
+        // Verificar login ao carregar a página
+        checkLogin();
+    </script>
+</body>
+</html>

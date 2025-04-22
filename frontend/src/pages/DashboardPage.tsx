@@ -184,7 +184,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const isOperator = AuthService.isCollector();
   const isSupervisor = AuthService.isSupervisor();
   const userInfo = AuthService.getUserInfo();
-  const currentUserName = userInfo?.fullName || '';
+  const currentUserName = userInfo?.full_name || '';
   const currentUserEmail = userInfo?.email || '';
 
   const handleImportSuccess = (importedOrders: Order[]) => {
@@ -280,12 +280,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     console.log('Operadores únicos:', uniqueOperadores);
   }, [orders]);
 
-  // Aplicar filtro por status
+  // Effect para filtrar pedidos quando os filtros mudam
   useEffect(() => {
-    console.log("Aplicando filtros e ordenação...");
-
-    // Começamos com todos os pedidos
     let filteredResults = [...orders];
+    
+    console.log('Filtering orders with selectedStatus:', selectedStatus);
 
     // 1. Filtrar por papel do usuário
     if (isSeller) {
@@ -310,11 +309,25 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     // 3. Aplicar filtro de status da sidebar
     if (selectedStatus) {
+      console.log(`Applying status filter: ${selectedStatus.field} = ${selectedStatus.value}`);
+      
       if (selectedStatus.field === 'situacaoVenda') {
-        filteredResults = filteredResults.filter(order =>
-          typeof order.situacaoVenda === 'string' &&
-          order.situacaoVenda.toLowerCase() === selectedStatus.value.toLowerCase()
-        );
+        // Log all order statuses to debug
+        console.log('All order statuses:', filteredResults.map(order => order.situacaoVenda));
+        
+        // Use case-insensitive comparison
+        filteredResults = filteredResults.filter(order => {
+          const orderStatus = (order.situacaoVenda || '').toLowerCase();
+          const filterValue = selectedStatus.value.toLowerCase();
+          const matches = orderStatus === filterValue;
+          
+          // Debug specific orders
+          if (filterValue === 'liberação' || filterValue === 'liberacao') {
+            console.log(`Order ${order.idVenda} - Status: '${orderStatus}', matches '${filterValue}': ${matches}`);
+          }
+          
+          return matches;
+        });
       } else if (selectedStatus.field === 'special' && selectedStatus.value === 'dataRecebimento') {
         const today = getTodayDateBR();
         filteredResults = filteredResults.filter(order => order.dataRecebimento === today);
@@ -437,18 +450,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     }
 
     // Vendedores só podem ver seus próprios pedidos
-    if (isSeller && userInfo?.fullName) {
+    if (isSeller && userInfo?.full_name) {
       // Uso de comparação mais flexível (verificando se o nome do usuário está contido no vendedor ou vice-versa)
-      const userNameLower = userInfo.fullName.toLowerCase();
+      const userNameLower = userInfo.full_name.toLowerCase();
       const vendedorLower = order.vendedor?.toLowerCase() || '';
 
       return vendedorLower.includes(userNameLower) || userNameLower.includes(vendedorLower);
     }
 
     // Operadores só podem ver pedidos atribuídos a eles
-    if (isOperator && userInfo?.fullName) {
+    if (isOperator && userInfo?.full_name) {
       // Uso de comparação mais flexível (verificando se o nome do usuário está contido no operador ou vice-versa)
-      const userNameLower = userInfo.fullName.toLowerCase();
+      const userNameLower = userInfo.full_name.toLowerCase();
       const operadorLower = order.operador?.toLowerCase() || '';
 
       return operadorLower.includes(userNameLower) || userNameLower.includes(operadorLower);
@@ -592,6 +605,21 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const statusCountsArray = Object.entries(statusCounts)
     .map(([status, count]) => ({ status, count }))
     .sort((a, b) => b.count - a.count);
+
+  // Listen for custom filter update events
+  useEffect(() => {
+    const handleUpdateFilter = (event: CustomEvent) => {
+      console.log('Received update-dashboard-filter event:', event.detail);
+      // Force refiltering by setting a dummy state that will trigger a re-render
+      setFilteredOrders([]); // Clear the filtered orders to force a refresh
+    };
+    
+    window.addEventListener('update-dashboard-filter', handleUpdateFilter as EventListener);
+    
+    return () => {
+      window.removeEventListener('update-dashboard-filter', handleUpdateFilter as EventListener);
+    };
+  }, []);
 
   return (
     <Box sx={{ py: 3, px: 1 }}>

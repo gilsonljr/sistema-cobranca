@@ -36,308 +36,143 @@ import AnalyticsDashboard from './reports/AnalyticsDashboard';
 import CashFlowForecast from './reports/CashFlowForecast';
 import OperatorPerformance from './reports/OperatorPerformance';
 import SellerPerformance from './reports/SellerPerformance';
+import AuthService from '../services/AuthService';
 
+// Update interface for date types
 interface AdvancedReportsPageProps {
   orders: Order[];
 }
 
-const AdvancedReportsPage: React.FC<AdvancedReportsPageProps> = ({ orders }) => {
-  const [activeTab, setActiveTab] = useState(0);
+// Update the component prop types to allow null dates
+interface ReportComponentProps {
+  orders: Order[];
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
-  // Estados para as datas de filtro
+const AdvancedReportsPage: React.FC<AdvancedReportsPageProps> = ({ orders }) => {
+  const [tabValue, setTabValue] = useState<string>("analytics");
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-
+  const [filterApplied, setFilterApplied] = useState(false);
+  
+  // Role-based access
+  const isAdmin = AuthService.isAdmin();
+  const isSupervisor = AuthService.isSupervisor();
+  
   // Filter out deleted orders
-  const nonDeletedOrders = useMemo(() => 
-    orders.filter(order => !order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado'), 
-    [orders]
-  );
-
-  // Estado para controlar a mensagem de sucesso
-  const [showFilterSuccess, setShowFilterSuccess] = useState(false);
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => 
+      !order.situacaoVenda || order.situacaoVenda.toLowerCase() !== 'deletado'
+    );
+  }, [orders]);
+  
+  // Handle tab change
+  const handleTabChange = (event: React.SyntheticEvent, newValue: string) => {
+    setTabValue(newValue);
   };
-
-  const handlePrint = () => {
-    window.print();
+  
+  // Apply date filter
+  const applyDateFilter = () => {
+    setFilterApplied(true);
   };
-
-  const handleDownload = () => {
-    alert('Funcionalidade de download será implementada em breve.');
+  
+  // Clear date filter
+  const clearDateFilter = () => {
+    setStartDate(null);
+    setEndDate(null);
+    setFilterApplied(false);
   };
-
-  // Função para aplicar os filtros
-  const applyFilters = () => {
-    setStartDate(startDate);
-    setEndDate(endDate);
-    setShowFilterSuccess(true);
-  };
-
-  // Função para fechar o alerta de sucesso
-  const handleCloseSuccess = () => {
-    setShowFilterSuccess(false);
-  };
-
+  
   return (
-    <Box sx={{ p: 4, bgcolor: '#f9fafc' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 500, color: '#334155' }}>
-          Relatórios Avançados
-        </Typography>
-
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<PrintIcon />}
-            onClick={handlePrint}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              boxShadow: 'none',
-              borderColor: '#e2e8f0',
-              color: '#64748b',
-              '&:hover': { borderColor: '#cbd5e1', bgcolor: '#f8fafc' }
-            }}
-          >
-            Imprimir
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<DownloadIcon />}
-            onClick={handleDownload}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              boxShadow: 'none',
-              borderColor: '#e2e8f0',
-              color: '#64748b',
-              '&:hover': { borderColor: '#cbd5e1', bgcolor: '#f8fafc' }
-            }}
-          >
-            Exportar
-          </Button>
-        </Box>
-      </Box>
-
-      <Paper sx={{ mb: 4, borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
-        <Box sx={{ p: 3, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-          <Typography variant="subtitle1" sx={{ mr: 2, color: '#475569', fontWeight: 500 }}>
-            Filtros:
-          </Typography>
-
-          <DatePicker
-            label="Data Inicial"
-            value={startDate}
-            onChange={(newValue) => setStartDate(newValue)}
-            format="dd/MM/yyyy"
-            slotProps={{
-              textField: {
-                size: "small",
-                sx: { width: 150 }
-              }
-            }}
-          />
-
-          <DatePicker
-            label="Data Final"
-            value={endDate}
-            onChange={(newValue) => setEndDate(newValue)}
-            format="dd/MM/yyyy"
-            slotProps={{
-              textField: {
-                size: "small",
-                sx: { width: 150 }
-              }
-            }}
-          />
-
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={applyFilters}
-            startIcon={<FilterIcon />}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              bgcolor: '#3b82f6',
-              '&:hover': { bgcolor: '#2563eb' }
-            }}
-          >
-            Aplicar Filtros
-          </Button>
-
-          <TextField
-            placeholder="Buscar..."
-            size="small"
-            sx={{ width: 200, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-          />
-
-          <IconButton color="primary" aria-label="filtros avançados" sx={{ color: '#64748b' }}>
-            <FilterIcon />
-          </IconButton>
-        </Box>
-      </Paper>
-
-      <Box sx={{ mb: 4 }}>
+    <Box sx={{ py: 3, px: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        Relatórios Avançados
+      </Typography>
+      
+      <Paper sx={{ mt: 3 }}>
         <Tabs
-          value={activeTab}
+          value={tabValue}
           onChange={handleTabChange}
           variant="scrollable"
           scrollButtons="auto"
-          aria-label="relatórios avançados tabs"
-          sx={{
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.95rem',
-              minHeight: '48px',
-              color: '#64748b',
-              '&.Mui-selected': { color: '#3b82f6' }
-            },
-            '& .MuiTabs-indicator': { backgroundColor: '#3b82f6', height: '3px', borderRadius: '3px' }
-          }}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
         >
-          <Tab
-            label="Dashboard Analítico"
-            icon={<BarChartIcon />}
-            iconPosition="start"
-          />
-          <Tab
-            label="Previsão de Recebimentos"
-            icon={<TimelineIcon />}
-            iconPosition="start"
-          />
-          <Tab
-            label="Performance de Operadores"
-            icon={<PeopleIcon />}
-            iconPosition="start"
-          />
-          <Tab
-            label="Performance de Vendedores"
-            icon={<PeopleIcon />}
-            iconPosition="start"
-          />
+          <Tab label="Dashboard Analítico" value="analytics" icon={<BarChartIcon />} iconPosition="start" />
+          <Tab label="Previsão de Fluxo de Caixa" value="cashflow" icon={<TimelineIcon />} iconPosition="start" />
+          <Tab label="Performance de Vendedores" value="sellers" icon={<PeopleIcon />} iconPosition="start" />
+          {(isAdmin || isSupervisor) && (
+            <Tab label="Performance de Operadores" value="operators" icon={<PeopleIcon />} iconPosition="start" />
+          )}
         </Tabs>
-      </Box>
-
-      <Box sx={{ width: '100%' }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={activeTab} onChange={handleTabChange}>
-            <Tab label="Dashboard Analítico" />
-            <Tab label="Performance de Vendedores" />
-            <Tab label="Previsão de Fluxo de Caixa" />
-          </Tabs>
-        </Box>
         
-        <Box sx={{ mt: 3 }}>
-          {activeTab === 0 && (
-            <AnalyticsDashboard 
-              orders={nonDeletedOrders} 
-              startDate={startDate ? startDate : undefined} 
-              endDate={endDate ? endDate : undefined} 
+        <Box sx={{ p: 3 }}>
+          {/* Filtro de data (comum para todos os relatórios) */}
+          <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <DatePicker
+              label="Data inicial"
+              value={startDate}
+              onChange={(newValue) => setStartDate(newValue)}
+              slotProps={{ textField: { size: 'small' } }}
+            />
+            <DatePicker
+              label="Data final"
+              value={endDate}
+              onChange={(newValue) => setEndDate(newValue)}
+              slotProps={{ textField: { size: 'small' } }}
+            />
+            <Button
+              variant="contained"
+              onClick={applyDateFilter}
+              disabled={!startDate && !endDate}
+              startIcon={<FilterIcon />}
+            >
+              Aplicar Filtro
+            </Button>
+            {filterApplied && (
+              <Button
+                variant="outlined"
+                onClick={clearDateFilter}
+              >
+                Limpar Filtro
+              </Button>
+            )}
+          </Box>
+          
+          {/* Conteúdo dos relatórios */}
+          {tabValue === "analytics" && (
+            <AnalyticsDashboard
+              orders={filteredOrders}
+              startDate={startDate}
+              endDate={endDate}
             />
           )}
-          {activeTab === 1 && (
-            <SellerPerformance 
-              orders={nonDeletedOrders} 
-              startDate={startDate ? startDate : undefined} 
-              endDate={endDate ? endDate : undefined} 
+          
+          {tabValue === "cashflow" && (
+            <CashFlowForecast
+              orders={filteredOrders}
+              startDate={startDate}
+              endDate={endDate}
             />
           )}
-          {activeTab === 2 && (
-            <CashFlowForecast 
-              orders={nonDeletedOrders} 
-              startDate={startDate ? startDate : undefined} 
-              endDate={endDate ? endDate : undefined} 
+          
+          {tabValue === "sellers" && (
+            <SellerPerformance
+              orders={filteredOrders}
+              startDate={startDate}
+              endDate={endDate}
+            />
+          )}
+          
+          {tabValue === "operators" && (isAdmin || isSupervisor) && (
+            <OperatorPerformance
+              orders={filteredOrders}
+              startDate={startDate}
+              endDate={endDate}
             />
           )}
         </Box>
-      </Box>
-
-      {/* Sugestões de relatórios adicionais */}
-      {activeTab === -1 && (
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Outros Relatórios Disponíveis
-          </Typography>
-          <Divider sx={{ mb: 3 }} />
-
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardActionArea>
-                  <CardContent>
-                    <PieChartIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                    <Typography variant="h6" component="div">
-                      Análise de Clientes
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Segmentação de clientes, comportamento de compra e análise de risco.
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardActionArea>
-                  <CardContent>
-                    <TimelineIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                    <Typography variant="h6" component="div">
-                      Análise de Tendências
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Identificação de padrões sazonais e previsão de demanda.
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardActionArea>
-                  <CardContent>
-                    <BarChartIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                    <Typography variant="h6" component="div">
-                      Análise Geográfica
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Distribuição regional de vendas e performance por localidade.
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            </Grid>
-          </Grid>
-        </Box>
-      )}
-
-      {/* Snackbar para mostrar mensagem de sucesso ao aplicar filtros */}
-      <Snackbar
-        open={showFilterSuccess}
-        autoHideDuration={3000}
-        onClose={handleCloseSuccess}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        sx={{ '& .MuiAlert-root': { borderRadius: '10px' } }}
-      >
-        <Alert onClose={handleCloseSuccess} severity="success" sx={{ width: '100%' }}>
-          Filtros aplicados com sucesso!
-        </Alert>
-      </Snackbar>
+      </Paper>
     </Box>
   );
 };

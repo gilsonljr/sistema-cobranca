@@ -26,6 +26,8 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -37,330 +39,344 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import SecurityIcon from '@mui/icons-material/Security';
 import { useNavigate } from 'react-router-dom';
-import { useUsers, User } from '../contexts/UserContext';
+import { useUsers } from '../contexts/UserContext';
+import { User, UserInput, UserRole } from '../types/User';
+import { convertToUserManagerFormat } from '../utils/userUtils';
 
-const UsersPage = () => {
+const UsersPage: React.FC = () => {
   const navigate = useNavigate();
-  const { users, deleteUser } = useUsers();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<number | null>(null);
-
-  // Estado para controle de filtros
-  const [filterStatus, setFilterStatus] = useState<'todos' | 'ativos' | 'inativos'>('todos');
+  const { users, addUser, updateUser, deleteUser } = useUsers();
   const [searchTerm, setSearchTerm] = useState('');
-
-  const handleCreateUser = () => {
-    navigate('/new-user');
-  };
-
-  // Filtrar usuários com base nos filtros aplicados
-  const filteredUsers = users.filter(user => {
-    // Filtro por status
-    if (filterStatus === 'ativos' && !user.ativo) return false;
-    if (filterStatus === 'inativos' && user.ativo) return false;
-
-    // Filtro por termo de busca
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        user.nome.toLowerCase().includes(searchLower) ||
-        user.email.toLowerCase().includes(searchLower) ||
-        getPerfilFromPapeis(user.papeis).toLowerCase().includes(searchLower)
-      );
-    }
-
-    return true;
+  const [activeTab, setActiveTab] = useState(0);
+  const [openAddDialog, setOpenAddDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<UserInput>({
+    email: '',
+    full_name: '',
+    role: 'collector',
+    is_active: true
   });
 
-  // Função para obter o perfil a partir dos papéis
-  const getPerfilFromPapeis = (papeis: string[]): string => {
-    if (papeis.includes('admin')) return 'Administrador';
-    if (papeis.includes('supervisor')) return 'Supervisor';
-    if (papeis.includes('collector') || papeis.includes('operador')) return 'Operador';
-    if (papeis.includes('seller') || papeis.includes('vendedor')) return 'Vendedor';
-    return 'Usuário';
-  };
+  const filteredUsers = users.filter(user => {
+    const matchesSearch =
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.full_name.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const handleEditUser = (userId: number) => {
-    navigate(`/edit-user/${userId}`);
-  };
+    const matchesTab =
+      activeTab === 0 || // All users
+      (activeTab === 1 && user.is_active) || // Active users
+      (activeTab === 2 && !user.is_active); // Inactive users
 
-  const handleDeleteClick = (userId: number) => {
-    setUserToDelete(userId);
-    setDeleteDialogOpen(true);
-  };
+    return matchesSearch && matchesTab;
+  });
 
-  const handleDeleteConfirm = () => {
-    if (userToDelete !== null) {
-      deleteUser(userToDelete);
-    }
-    setDeleteDialogOpen(false);
-    setUserToDelete(null);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setUserToDelete(null);
-  };
-
-  // Estado para o menu de ações
-  const [actionMenuAnchor, setActionMenuAnchor] = useState<null | HTMLElement>(null);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-
-  const handleOpenActionMenu = (event: React.MouseEvent<HTMLElement>, userId: number) => {
-    setActionMenuAnchor(event.currentTarget);
-    setSelectedUserId(userId);
-  };
-
-  const handleCloseActionMenu = () => {
-    setActionMenuAnchor(null);
-    setSelectedUserId(null);
-  };
-
-  const handleViewUser = (userId: number) => {
-    // Implementar visualização detalhada do usuário
-    console.log('Visualizar usuário:', userId);
-    handleCloseActionMenu();
-  };
-
-  const handleManagePermissions = (userId: number) => {
-    // Implementar gerenciamento de permissões
-    console.log('Gerenciar permissões:', userId);
-    handleCloseActionMenu();
-  };
-
-  const handleDeleteFromMenu = () => {
-    if (selectedUserId) {
-      handleDeleteClick(selectedUserId);
-      handleCloseActionMenu();
+  const handleAddUser = async () => {
+    try {
+      await addUser(formData);
+      setOpenAddDialog(false);
+      setFormData({
+        email: '',
+        full_name: '',
+        role: 'collector',
+        is_active: true
+      });
+    } catch (error) {
+      console.error('Failed to add user:', error);
     }
   };
 
-  const handleEditFromMenu = () => {
-    if (selectedUserId) {
-      handleEditUser(selectedUserId);
-      handleCloseActionMenu();
+  const handleEditUser = async () => {
+    if (!selectedUser) return;
+    try {
+      await updateUser(selectedUser.id, formData);
+      setOpenEditDialog(false);
+      setSelectedUser(null);
+      setFormData({
+        email: '',
+        full_name: '',
+        role: 'collector',
+        is_active: true
+      });
+    } catch (error) {
+      console.error('Failed to update user:', error);
     }
   };
+
+  const handleDeleteUser = async (user: User) => {
+    try {
+      await deleteUser(user.id);
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+    }
+  };
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  // Handle role selection
+  const handleRoleChange = (e: React.ChangeEvent<{ value: unknown }>) => {
+    setFormData(prev => ({
+      ...prev,
+      role: e.target.value as UserRole
+    }));
+  };
+
+  // Open edit dialog
+  const handleEditClick = (user: User) => {
+    setSelectedUser(user);
+    setFormData({
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      is_active: user.is_active,
+      password: ''
+    });
+    setOpenEditDialog(true);
+  };
+
+  // Open delete dialog
+  const handleDeleteClick = (user: User) => {
+    setSelectedUser(user);
+    setOpenDeleteDialog(true);
+  };
+
+  // Get role color
+  const getRoleColor = (role: UserRole) => {
+    switch (role) {
+      case 'admin': return 'error';
+      case 'supervisor': return 'warning';
+      case 'collector': return 'info';
+      case 'seller': return 'success';
+      default: return 'default';
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{ p: 3, bgcolor: '#f9fafc' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 500, color: '#334155' }}>
-          Gerenciamento de Usuários
-        </Typography>
+    <Box p={3}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4">Users</Typography>
         <Button
           variant="contained"
           color="primary"
-          startIcon={<PersonAddIcon />}
-          onClick={handleCreateUser}
-          sx={{
-            borderRadius: '8px',
-            textTransform: 'none',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-            bgcolor: '#3b82f6',
-            '&:hover': { bgcolor: '#2563eb' }
-          }}
+          startIcon={<AddIcon />}
+          onClick={() => setOpenAddDialog(true)}
         >
-          Novo Usuário
+          Add User
         </Button>
       </Box>
 
-      {/* Filtros e Pesquisa */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Paper sx={{ mb: 2 }}>
+        <Box p={2}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="Search users..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Box>
         <Tabs
-          value={filterStatus}
-          onChange={(_, newValue) => setFilterStatus(newValue)}
-          sx={{
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              fontWeight: 500,
-              minHeight: '40px',
-              color: '#64748b',
-              '&.Mui-selected': { color: '#3b82f6' }
-            },
-            '& .MuiTabs-indicator': { backgroundColor: '#3b82f6', height: '3px', borderRadius: '3px' }
-          }}
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          indicatorColor="primary"
+          textColor="primary"
         >
-          <Tab value="todos" label="Todos" />
-          <Tab value="ativos" label="Ativos" />
-          <Tab value="inativos" label="Inativos" />
+          <Tab label="All Users" />
+          <Tab label="Active" />
+          <Tab label="Inactive" />
         </Tabs>
-
-        <TextField
-          placeholder="Buscar usuários..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          size="small"
-          sx={{
-            width: 250,
-            '& .MuiOutlinedInput-root': { borderRadius: '8px' }
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" sx={{ color: '#94a3b8' }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
-
-      <Paper sx={{ borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Nome</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Perfil</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Permissões</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Ações</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
-                    <Typography variant="body1" color="text.secondary">
-                      Nenhum usuário encontrado com os filtros aplicados.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredUsers.map(user => {
-                  return (
-                    <TableRow key={user.id}>
-                      <TableCell>{user.nome}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={getPerfilFromPapeis(user.papeis)}
-                          size="small"
-                          color={
-                            getPerfilFromPapeis(user.papeis) === 'Administrador' ? 'primary' :
-                            getPerfilFromPapeis(user.papeis) === 'Supervisor' ? 'secondary' :
-                            getPerfilFromPapeis(user.papeis) === 'Vendedor' ? 'success' : 'info'
-                          }
-                          sx={{
-                            borderRadius: '6px',
-                            fontWeight: 500,
-                            fontSize: '0.75rem'
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={user.ativo ? 'Ativo' : 'Inativo'}
-                          size="small"
-                          color={user.ativo ? 'success' : 'error'}
-                          sx={{
-                            borderRadius: '6px',
-                            fontWeight: 500,
-                            fontSize: '0.75rem'
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Tooltip title={user.papeis.join(', ')}>
-                          <Chip
-                            label={`${user.papeis.length} permissões`}
-                            size="small"
-                            color="default"
-                            sx={{
-                              borderRadius: '6px',
-                              fontWeight: 500,
-                              fontSize: '0.75rem',
-                              bgcolor: 'rgba(100, 116, 139, 0.1)',
-                              color: '#64748b'
-                            }}
-                          />
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleOpenActionMenu(e, user.id)}
-                        >
-                          <MoreVertIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
       </Paper>
 
-      {/* Menu de ações para cada usuário */}
-      <Menu
-        anchorEl={actionMenuAnchor}
-        open={Boolean(actionMenuAnchor)}
-        onClose={handleCloseActionMenu}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        sx={{ mt: 1 }}
-      >
-        <MenuItem onClick={handleEditFromMenu} sx={{ py: 1, px: 2 }}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" sx={{ color: '#3b82f6' }} />
-          </ListItemIcon>
-          <ListItemText primary="Editar Usuário" />
-        </MenuItem>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Role</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredUsers.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.full_name}</TableCell>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={user.role}
+                    color={getRoleColor(user.role)}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={user.is_active ? 'Active' : 'Inactive'}
+                    color={user.is_active ? 'success' : 'default'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>
+                  <IconButton onClick={() => handleEditClick(user)}>
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton onClick={() => handleDeleteClick(user)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-        <MenuItem onClick={() => selectedUserId && handleViewUser(selectedUserId)} sx={{ py: 1, px: 2 }}>
-          <ListItemIcon>
-            <VisibilityIcon fontSize="small" sx={{ color: '#64748b' }} />
-          </ListItemIcon>
-          <ListItemText primary="Visualizar Detalhes" />
-        </MenuItem>
-
-        <MenuItem onClick={() => selectedUserId && handleManagePermissions(selectedUserId)} sx={{ py: 1, px: 2 }}>
-          <ListItemIcon>
-            <SecurityIcon fontSize="small" sx={{ color: '#0891b2' }} />
-          </ListItemIcon>
-          <ListItemText primary="Gerenciar Permissões" />
-        </MenuItem>
-
-        <MenuItem onClick={handleDeleteFromMenu} sx={{ py: 1, px: 2 }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" sx={{ color: '#ef4444' }} />
-          </ListItemIcon>
-          <ListItemText primary="Excluir Usuário" />
-        </MenuItem>
-      </Menu>
-
-      {/* Diálogo de confirmação para exclusão */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">
-          Confirmar exclusão
-        </DialogTitle>
+      {/* Add User Dialog */}
+      <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
+        <DialogTitle>Add New User</DialogTitle>
         <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.
+          <TextField
+            autoFocus
+            margin="dense"
+            name="email"
+            label="Email"
+            type="email"
+            fullWidth
+            value={formData.email}
+            onChange={handleInputChange}
+          />
+          <TextField
+            margin="dense"
+            name="full_name"
+            label="Full Name"
+            fullWidth
+            value={formData.full_name}
+            onChange={handleInputChange}
+          />
+          <TextField
+            margin="dense"
+            name="password"
+            label="Password"
+            type="password"
+            fullWidth
+            value={formData.password}
+            onChange={handleInputChange}
+          />
+          <TextField
+            margin="dense"
+            name="role"
+            label="Role"
+            select
+            fullWidth
+            value={formData.role}
+            onChange={handleRoleChange}
+          >
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="supervisor">Supervisor</MenuItem>
+            <MenuItem value="collector">Collector</MenuItem>
+            <MenuItem value="seller">Seller</MenuItem>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenAddDialog(false)}>Cancel</Button>
+          <Button onClick={handleAddUser} color="primary">Add</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+        <DialogTitle>Edit User</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            name="email"
+            label="Email"
+            type="email"
+            fullWidth
+            value={formData.email}
+            onChange={handleInputChange}
+          />
+          <TextField
+            margin="dense"
+            name="full_name"
+            label="Full Name"
+            fullWidth
+            value={formData.full_name}
+            onChange={handleInputChange}
+          />
+          <TextField
+            margin="dense"
+            name="password"
+            label="New Password (leave blank to keep current)"
+            type="password"
+            fullWidth
+            value={formData.password}
+            onChange={handleInputChange}
+          />
+          <TextField
+            margin="dense"
+            name="role"
+            label="Role"
+            select
+            fullWidth
+            value={formData.role}
+            onChange={handleRoleChange}
+          >
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="supervisor">Supervisor</MenuItem>
+            <MenuItem value="collector">Collector</MenuItem>
+            <MenuItem value="seller">Seller</MenuItem>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEditDialog(false)}>Cancel</Button>
+          <Button onClick={handleEditUser} color="primary">Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete User Dialog */}
+      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
+        <DialogTitle>Delete User</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete {selectedUser?.full_name}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel} color="primary">
-            Cancelar
-          </Button>
-          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
-            Excluir
-          </Button>
+          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={() => handleDeleteUser(selectedUser!)} color="error">Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>

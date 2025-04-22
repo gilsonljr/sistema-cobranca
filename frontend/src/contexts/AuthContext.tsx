@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AuthService, { UserInfo } from '../services/AuthService';
+import UnifiedAuthService, { UserInfo } from '../services/UnifiedAuthService';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -25,11 +25,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     // Check authentication status on mount
     const checkAuth = async () => {
-      const isAuth = AuthService.isAuthenticated();
+      const isAuth = UnifiedAuthService.isAuthenticated();
       setIsAuthenticated(isAuth);
 
       if (isAuth) {
-        const user = AuthService.getUserInfo();
+        const user = UnifiedAuthService.getUserInfo();
         setUserInfo(user);
       }
     };
@@ -38,22 +38,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    await AuthService.login({ email, password });
+    await UnifiedAuthService.login({ email, password });
     setIsAuthenticated(true);
-    const user = AuthService.getUserInfo();
+    const user = UnifiedAuthService.getUserInfo();
     setUserInfo(user);
   };
 
   const logout = () => {
-    AuthService.logout();
+    UnifiedAuthService.logout();
     setIsAuthenticated(false);
     setUserInfo(null);
   };
 
-  const isAdmin = () => AuthService.isAdmin();
-  const isSupervisor = () => AuthService.isSupervisor();
-  const isCollector = () => AuthService.isCollector();
-  const isSeller = () => AuthService.isSeller();
+  // Helper functions to check user roles
+  const isAdmin = () => {
+    const user = UnifiedAuthService.getUserInfo();
+    return user?.role === 'admin';
+  };
+
+  const isSupervisor = () => {
+    const user = UnifiedAuthService.getUserInfo();
+    return user?.role === 'supervisor';
+  };
+
+  const isCollector = () => {
+    const user = UnifiedAuthService.getUserInfo();
+    return user?.role === 'collector';
+  };
+
+  const isSeller = () => {
+    const user = UnifiedAuthService.getUserInfo();
+    return user?.role === 'seller';
+  };
 
   return (
     <AuthContext.Provider
@@ -64,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         logout,
         isAdmin,
         isSupervisor,
-        isCollector, 
+        isCollector,
         isSeller
       }}
     >
@@ -79,4 +95,4 @@ export const useAuth = (): AuthContextType => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}; 
+};

@@ -44,8 +44,8 @@ const mockSellers = [
 
 interface SellerPerformanceProps {
   orders: Order[];
-  startDate?: Date;
-  endDate?: Date;
+  startDate?: Date | null;
+  endDate?: Date | null;
 }
 
 const SellerPerformance: React.FC<SellerPerformanceProps> = ({

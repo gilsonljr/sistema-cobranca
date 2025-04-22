@@ -25,6 +25,8 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Divider,
+  Alert,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -35,9 +37,13 @@ import {
   Timer as TimerIcon,
   Star as StarIcon,
   GetApp as GetAppIcon,
+  EmojiEvents as EmojiEventsIcon,
 } from '@mui/icons-material';
 import ptBR from 'date-fns/locale/pt-BR';
 import { Order } from '../types/Order';
+import AuthService from '../services/AuthService';
+import { Link } from 'react-router-dom';
+import { formatCurrency, formatPercentage } from '../utils/formatters';
 
 interface PerformanceData {
   name: string;
@@ -59,6 +65,13 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
   const [startDate, setStartDate] = React.useState<Date | null>(null);
   const [endDate, setEndDate] = React.useState<Date | null>(null);
   const [filteredOrdersList, setFilteredOrdersList] = React.useState<Order[]>([]);
+  
+  // Add role checks
+  const isAdmin = AuthService.isAdmin();
+  const isSupervisor = AuthService.isSupervisor();
+  const isSeller = AuthService.isSeller();
+  const userInfo = AuthService.getUserInfo();
+  const currentUserName = userInfo?.full_name || '';
   
   // Filter out deleted orders first
   const nonDeletedOrders = React.useMemo(() => 
@@ -230,7 +243,9 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
             variant="fullWidth"
           >
             <Tab label="Desempenho de Vendedores" value={0} />
-            <Tab label="Desempenho de Operadores" value={1} />
+            {(isAdmin || isSupervisor) && (
+              <Tab label="Desempenho de Operadores" value={1} />
+            )}
           </Tabs>
         </Box>
 
@@ -468,6 +483,153 @@ const ReportsPage: React.FC<Props> = ({ orders }) => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Only show operator performance for admin and supervisor */}
+      {!isSeller && (
+        <Grid item xs={12}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: '12px',
+              boxShadow: '0 0 10px rgba(0,0,0,0.1)'
+            }}
+          >
+            <Typography variant="h6" gutterBottom>
+              Desempenho do Operador
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Operador</TableCell>
+                    <TableCell align="right">Total de Cobranças</TableCell>
+                    <TableCell align="right">Valor Recuperado</TableCell>
+                    <TableCell align="right">Média por Cobrança</TableCell>
+                    <TableCell align="right">Taxa de Sucesso</TableCell>
+                    <TableCell align="right">Ranking</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {operatorPerformance.map((operator, index) => (
+                    <TableRow key={operator.name} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          {index < 3 && (
+                            <StarIcon sx={{ color: ['#FFD700', '#C0C0C0', '#CD7F32'][index], mr: 1 }} />
+                          )}
+                          {operator.name}
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">{operator.totalOrders}</TableCell>
+                      <TableCell align="right">
+                        R$ {operator.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell align="right">
+                        R$ {operator.averageValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={operator.successRate}
+                            sx={{ flexGrow: 1, mr: 1 }}
+                          />
+                          {operator.successRate.toFixed(1)}%
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">#{index + 1}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </Grid>
+      )}
+      
+      {/* For sellers, show a personalized performance section */}
+      {isSeller && (
+        <Grid item xs={12}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: '12px',
+              boxShadow: '0 0 10px rgba(0,0,0,0.1)'
+            }}
+          >
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+              <EmojiEventsIcon sx={{ mr: 1, color: '#FFD700' }} />
+              Meu Desempenho
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Veja seu desempenho pessoal no período selecionado. Para rankings completos e comparações, visite a página de <Link to="/ranking">Ranking de Vendedores</Link>.
+            </Typography>
+            
+            {sellerPerformance.filter(seller => seller.name === currentUserName).length > 0 ? (
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6} lg={3}>
+                  <Card sx={{ bgcolor: '#f8f9fa', height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Total de Vendas
+                      </Typography>
+                      <Typography variant="h4" sx={{ mt: 1, fontWeight: 600 }}>
+                        {sellerPerformance.find(s => s.name === currentUserName)?.totalOrders || 0}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} md={6} lg={3}>
+                  <Card sx={{ bgcolor: '#f8f9fa', height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Valor Total
+                      </Typography>
+                      <Typography variant="h4" sx={{ mt: 1, fontWeight: 600 }}>
+                        {formatCurrency(sellerPerformance.find(s => s.name === currentUserName)?.totalValue || 0)}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} md={6} lg={3}>
+                  <Card sx={{ bgcolor: '#f8f9fa', height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Ticket Médio
+                      </Typography>
+                      <Typography variant="h4" sx={{ mt: 1, fontWeight: 600 }}>
+                        {formatCurrency(sellerPerformance.find(s => s.name === currentUserName)?.averageValue || 0)}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} md={6} lg={3}>
+                  <Card sx={{ bgcolor: '#f8f9fa', height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Taxa de Sucesso
+                      </Typography>
+                      <Typography variant="h4" sx={{ mt: 1, fontWeight: 600 }}>
+                        {(sellerPerformance.find(s => s.name === currentUserName)?.successRate || 0).toFixed(0)}%
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            ) : (
+              <Alert severity="info">
+                Não foram encontrados dados de vendas para você no período selecionado.
+              </Alert>
+            )}
+          </Paper>
+        </Grid>
+      )}
     </Box>
   );
 };

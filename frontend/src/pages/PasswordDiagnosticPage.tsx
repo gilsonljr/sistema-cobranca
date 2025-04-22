@@ -221,7 +221,7 @@ const PasswordDiagnosticPage: React.FC = () => {
                           {user.email}
                           <br />
                           <Typography variant="caption" color="textSecondary">
-                            Papéis: {user.papeis.join(', ')}
+                            Papéis: {user.papeis ? user.papeis.join(', ') : ''}
                           </Typography>
                         </>
                       }

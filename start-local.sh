@@ -45,7 +45,7 @@ start_services() {
   echo -e "${GREEN}Starting services...${NC}"
   docker-compose up -d
   echo -e "${GREEN}Services started. Access the application at:${NC}"
-  echo -e "  Frontend: ${YELLOW}http://localhost${NC}"
+  echo -e "  Frontend: ${YELLOW}http://localhost:3001${NC}"
   echo -e "  Backend API: ${YELLOW}http://localhost:8000${NC}"
   echo -e "  API Documentation: ${YELLOW}http://localhost:8000/docs${NC}"
 }
