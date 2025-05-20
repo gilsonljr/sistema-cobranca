@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model billinghistory {
+  id          String   @id
+  orderId     String
+  amount      Float
+  notes       String?
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+model order {
+  id              String       @id
+  orderNumber     String
+  customerName    String
+  customerPhone   String
+  customerAddress String
+  totalAmount     Float
+  paidAmount      Float        @default(0)
+  status          OrderStatus  @default(PENDING)
+  trackingCode    String?
+  isDuplicate     Boolean      @default(false)
+  tenantId        String
+  sellerId        String
+  collectorId     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime
+
+  @@unique([orderNumber, tenantId], map: "Order_orderNumber_tenantId_key")
+  @@index([collectorId], map: "Order_collectorId_idx")
+  @@index([createdAt], map: "Order_createdAt_idx")
+  @@index([sellerId], map: "Order_sellerId_idx")
+  @@index([status], map: "Order_status_idx")
+  @@index([tenantId], map: "Order_tenantId_idx")
+  @@fulltext([customerName, customerPhone, customerAddress], map: "Order_customerName_customerPhone_customerAddress_idx")
+}
+
+model settings {
+  id            String   @id
+  tenantId      String   @unique(map: "Settings_tenantId_key")
+  theme         String   @default("light")
+  notifyByEmail Boolean  @default(true)
+  notifyBySMS   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+}
+
+model tenant {
+  id        String   @id
+  name      String
+  domain    String   @unique(map: "Tenant_domain_key")
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+model user {
+  id             String    @id
+  email          String
+  hashedPassword String
+  fullName       String
+  role           UserRole
+  isActive       Boolean   @default(true)
+  tenantId       String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+
+  @@unique([email, tenantId], map: "User_email_tenantId_key")
+  @@index([email, tenantId], map: "User_email_tenantId_idx")
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  COLLECTOR
+  SELLER
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  PAID
+  PARTIALLY_PAID
+  NEGOTIATING
+  CANCELLED
+  DELIVERED
+}
